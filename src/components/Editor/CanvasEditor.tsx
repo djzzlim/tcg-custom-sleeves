@@ -97,8 +97,21 @@ export default function CanvasEditor() {
       updateSleeve(currentId, { canvasData: json, previewUrl: dataUrl });
     };
 
-    canvas.on('object:modified', () => {
+    canvas.on('object:modified', (e) => {
       if (isLoadingRef.current) return;
+      
+      const obj = e.target;
+      if (obj && obj.type === 'i-text') {
+        const textObj = obj as IText;
+        if (textObj.scaleX && textObj.scaleX !== 1) {
+          textObj.set({
+            fontSize: Math.round((textObj.fontSize || 32) * textObj.scaleX),
+            scaleX: 1,
+            scaleY: 1
+          });
+        }
+      }
+
       updateActiveObjectState();
       saveToStore();
     });
