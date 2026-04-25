@@ -8,8 +8,6 @@ import MultiSleeveList from '@/components/Order/MultiSleeveList';
 import EditorSidebar from '@/components/Editor/EditorSidebar';
 import EditorSubPanel from '@/components/Editor/EditorSubPanel';
 
-import { ShoppingCart } from 'lucide-react';
-
 export default function Home() {
   const { 
     purchaseId, 
@@ -67,16 +65,15 @@ export default function Home() {
           />
         </div>
         
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-4">
           <span className="text-sm text-muted-foreground font-mono">
             ID: {purchaseId}
           </span>
           <button 
             onClick={handleCheckout}
             disabled={isCheckingOut}
-            className="px-6 py-2.5 rounded bg-primary text-black font-bold uppercase tracking-wider text-sm hover:brightness-110 transition-all disabled:opacity-50 flex items-center gap-2"
+            className="px-6 py-2 rounded-full bg-primary text-black font-serif italic font-bold hover:brightness-110 transition-all shadow-[0_0_15px_rgba(242,206,27,0.4)] disabled:opacity-50"
           >
-            <ShoppingCart size={18} strokeWidth={2.5} />
             {isCheckingOut ? 'Processing...' : 'Add to Basket'}
           </button>
         </div>
