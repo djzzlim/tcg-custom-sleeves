@@ -70,6 +70,7 @@ export default function Mockup3D() {
   return (
     <div className="w-full h-full">
       <Canvas shadows>
+        <color attach="background" args={['#2a2a2a']} />
         <PerspectiveCamera makeDefault position={[0, 0, 12]} fov={45} />
         <OrbitControls 
           enablePan={false} 
@@ -78,13 +79,14 @@ export default function Mockup3D() {
           maxPolarAngle={Math.PI / 1.5}
         />
         
-        <ambientLight intensity={0.5} />
-        <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} intensity={1} castShadow />
-        <pointLight position={[-10, -10, -10]} intensity={0.5} />
+        <ambientLight intensity={1.5} />
+        <spotLight position={[10, 20, 10]} angle={0.3} penumbra={1} intensity={10} castShadow />
+        <pointLight position={[-10, -10, -10]} intensity={3} />
+        <directionalLight position={[0, 0, 10]} intensity={2} />
 
         <Suspense fallback={null}>
           <SleeveModel textureUrl={activeSleeve?.previewUrl} />
-          <Environment preset="city" />
+          <Environment preset="studio" />
           <ContactShadows 
             position={[0, -4, 0]} 
             opacity={0.4} 

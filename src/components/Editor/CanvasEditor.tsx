@@ -92,7 +92,7 @@ export default function CanvasEditor() {
     const saveToStore = () => {
       if (!fabricCanvas.current || !activeSleeveId) return;
       const json = JSON.stringify(fabricCanvas.current.toJSON());
-      const dataUrl = fabricCanvas.current.toDataURL({ format: 'png', quality: 0.5, multiplier: 1 });
+      const dataUrl = fabricCanvas.current.toDataURL({ format: 'jpeg', quality: 0.8, multiplier: 1 });
       updateSleeve(activeSleeveId, { canvasData: json, previewUrl: dataUrl });
     };
 
