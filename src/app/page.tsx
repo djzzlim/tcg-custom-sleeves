@@ -58,7 +58,11 @@ export default function Home() {
       {/* Top Header */}
       <header className="h-16 border-b border-border bg-[#181818] flex justify-between items-center px-6 flex-shrink-0 z-20">
         <div className="flex items-center">
-          <h1 className="text-xl font-bold tracking-tight text-primary">TCG CUSTOM SLEEVES</h1>
+          <img 
+            src="/logo.jpeg" 
+            alt="Client Logo" 
+            className="h-12 w-auto object-contain invert mix-blend-screen opacity-90"
+          />
         </div>
         
         <div className="flex items-center gap-4">
