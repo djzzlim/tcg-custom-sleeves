@@ -102,6 +102,13 @@ export default function CanvasEditor() {
     });
     
     canvas.on('object:added', (e) => {
+      // Keep text above images
+      canvas.getObjects().forEach(obj => {
+        if (obj.type === 'i-text' && e.target !== obj) {
+          canvas.bringObjectToFront(obj);
+        }
+      });
+      // Keep frames on the very top
       const frame = canvas.getObjects().find((obj: any) => obj.isFrame);
       if (frame && e.target !== frame) {
         canvas.bringObjectToFront(frame);
@@ -133,7 +140,7 @@ export default function CanvasEditor() {
                 originY: 'center',
               });
               cvs.add(img);
-              cvs.sendObjectToBack(img);
+              // Do not send to back, let it stack above older images, but below text/frames
               cvs.renderAll();
               saveToStore();
             });
@@ -164,16 +171,16 @@ export default function CanvasEditor() {
 
           if (type !== 'none') {
             const frameSrc = {
-              'standard': '/frames/01.svg',
-              'fade': '/frames/02.svg',
-              'torn1': '/frames/03.svg',
-              'torn2': '/frames/04.svg',
-              'wobble': '/frames/05.svg',
-              'floral': '/frames/06.svg',
-              'scallop': '/frames/07.svg',
-              'stamp': '/frames/08.svg',
-              'wavy': '/frames/09.svg',
-              'zigzag': '/frames/10.svg',
+              'standard': '/frames/01.svg?v=8',
+              'fade': '/frames/02.svg?v=8',
+              'torn1': '/frames/03.svg?v=8',
+              'torn2': '/frames/04.svg?v=8',
+              'wobble': '/frames/05.svg?v=8',
+              'floral': '/frames/06.svg?v=8',
+              'scallop': '/frames/07.svg?v=8',
+              'stamp': '/frames/08.svg?v=8',
+              'wavy': '/frames/09.svg?v=8',
+              'zigzag': '/frames/10.svg?v=8',
             }[type as string];
 
             if (frameSrc) {

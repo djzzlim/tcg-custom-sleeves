@@ -5,9 +5,9 @@
       </filter>
       
     </defs>
-    <path d="M0,0 H400 V560 H0 Z M40,20 
-    H360 Q380,20 380,40
-    V520 Q380,540 360,540
-    H40 Q20,540 20,520
-    V40 Q20,20 40,20 Z" fill="white" fill-rule="evenodd" filter="url(#shadow)" />
+    <path d="M0,0 H400 V560 H0 Z M30,10 
+    H370 Q390,10 390,30
+    V530 Q390,550 370,550
+    H30 Q10,550 10,530
+    V30 Q10,10 30,10 Z" fill="white" fill-rule="evenodd" filter="url(#shadow)" />
   </svg>

@@ -5,5 +5,5 @@
       </filter>
       
     </defs>
-    <path d="M0,0 H400 V560 H0 Z M20,20 V540 H380 V20 Z" fill="white"/>
+    <path d="M0,0 H400 V560 H0 Z M10,10 V550 H390 V10 Z" fill="white"/>
   </svg>

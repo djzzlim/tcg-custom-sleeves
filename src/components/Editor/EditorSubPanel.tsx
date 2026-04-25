@@ -52,16 +52,16 @@ export default function EditorSubPanel() {
           <p className="text-sm text-foreground">Choose a frame style (e.g., Wobble):</p>
           <div className="grid grid-cols-2 gap-[2px] bg-border p-[2px] border border-border">
             {[
-              { id: 'standard', src: '/frames/01.svg' },
-              { id: 'fade', src: '/frames/02.svg' },
-              { id: 'torn1', src: '/frames/03.svg' },
-              { id: 'torn2', src: '/frames/04.svg' },
-              { id: 'wobble', src: '/frames/05.svg' },
-              { id: 'floral', src: '/frames/06.svg' },
-              { id: 'scallop', src: '/frames/07.svg' },
-              { id: 'stamp', src: '/frames/08.svg' },
-              { id: 'wavy', src: '/frames/09.svg' },
-              { id: 'zigzag', src: '/frames/10.svg' },
+              { id: 'standard', src: '/frames/01.svg?v=8' },
+              { id: 'fade', src: '/frames/02.svg?v=8' },
+              { id: 'torn1', src: '/frames/03.svg?v=8' },
+              { id: 'torn2', src: '/frames/04.svg?v=8' },
+              { id: 'wobble', src: '/frames/05.svg?v=8' },
+              { id: 'floral', src: '/frames/06.svg?v=8' },
+              { id: 'scallop', src: '/frames/07.svg?v=8' },
+              { id: 'stamp', src: '/frames/08.svg?v=8' },
+              { id: 'wavy', src: '/frames/09.svg?v=8' },
+              { id: 'zigzag', src: '/frames/10.svg?v=8' },
             ].map((frame) => (
               <button
                 key={frame.id}
