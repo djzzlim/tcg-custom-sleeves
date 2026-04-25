@@ -87,7 +87,7 @@ export default function Home() {
         {/* Center Canvas */}
         <section className="flex-1 relative bg-[#2b2b2b] flex items-center justify-center overflow-hidden">
           {activeSleeveId ? (
-            <CanvasEditor key={activeSleeveId} />
+            <CanvasEditor />
           ) : (
             <div className="text-muted-foreground italic">No sleeve selected</div>
           )}

@@ -11,8 +11,15 @@ const CANVAS_HEIGHT = 560; // 5:7 ratio
 export default function CanvasEditor() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fabricCanvas = useRef<Canvas | null>(null);
+  const isLoadingRef = useRef(false);
   const { activeSleeveId, updateSleeve, sleeves, setActiveObjectType, setTextProps } = useStore();
 
+  const latestSleeveIdRef = useRef(activeSleeveId);
+  useEffect(() => {
+    latestSleeveIdRef.current = activeSleeveId;
+  }, [activeSleeveId]);
+
+  // 1. Initialize Canvas once
   useEffect(() => {
     if (!canvasRef.current || fabricCanvas.current) return;
 
@@ -23,13 +30,6 @@ export default function CanvasEditor() {
     });
 
     fabricCanvas.current = canvas;
-
-    const activeSleeve = sleeves.find(s => s.id === activeSleeveId);
-    if (activeSleeve?.canvasData) {
-      canvas.loadFromJSON(JSON.parse(activeSleeve.canvasData)).then(() => {
-        canvas.renderAll();
-      });
-    }
 
     const updateActiveObjectState = () => {
       const active = canvas.getActiveObject();
@@ -90,18 +90,21 @@ export default function CanvasEditor() {
     });
     
     const saveToStore = () => {
-      if (!fabricCanvas.current || !activeSleeveId) return;
+      const currentId = latestSleeveIdRef.current;
+      if (!fabricCanvas.current || !currentId || isLoadingRef.current) return;
       const json = JSON.stringify(fabricCanvas.current.toJSON());
       const dataUrl = fabricCanvas.current.toDataURL({ format: 'jpeg', quality: 0.8, multiplier: 1 });
-      updateSleeve(activeSleeveId, { canvasData: json, previewUrl: dataUrl });
+      updateSleeve(currentId, { canvasData: json, previewUrl: dataUrl });
     };
 
     canvas.on('object:modified', () => {
+      if (isLoadingRef.current) return;
       updateActiveObjectState();
       saveToStore();
     });
     
     canvas.on('object:added', (e) => {
+      if (isLoadingRef.current) return;
       // Keep text above images
       canvas.getObjects().forEach(obj => {
         if (obj.type === 'i-text' && e.target !== obj) {
@@ -116,7 +119,10 @@ export default function CanvasEditor() {
       saveToStore();
     });
     
-    canvas.on('object:removed', saveToStore);
+    canvas.on('object:removed', () => {
+      if (isLoadingRef.current) return;
+      saveToStore();
+    });
 
     // Event Listener for external actions
     const handleCanvasAction = (e: Event) => {
@@ -296,6 +302,28 @@ export default function CanvasEditor() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 2. Sync Canvas when activeSleeveId changes
+  useEffect(() => {
+    if (!fabricCanvas.current || !activeSleeveId) return;
+    const canvas = fabricCanvas.current;
+
+    isLoadingRef.current = true;
+    const activeSleeve = sleeves.find(s => s.id === activeSleeveId);
+
+    if (activeSleeve?.canvasData) {
+      canvas.loadFromJSON(JSON.parse(activeSleeve.canvasData)).then(() => {
+        canvas.renderAll();
+        // Allow events to settle before enabling saveToStore
+        setTimeout(() => { isLoadingRef.current = false; }, 50);
+      });
+    } else {
+      canvas.clear();
+      canvas.backgroundColor = '#000000';
+      canvas.renderAll();
+      setTimeout(() => { isLoadingRef.current = false; }, 50);
+    }
+  }, [activeSleeveId]); // We omit sleeves from deps to prevent infinite loops
 
   return (
     <div className="flex flex-col items-center justify-center w-full h-full p-8 overflow-auto bg-[#2b2b2b]">
