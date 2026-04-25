@@ -1,65 +1,120 @@
-import Image from "next/image";
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useStore } from '@/store/useStore';
+import CanvasEditor from '@/components/Editor/CanvasEditor';
+import Mockup3D from '@/components/Preview/Mockup3D';
+import MultiSleeveList from '@/components/Order/MultiSleeveList';
+import EditorSidebar from '@/components/Editor/EditorSidebar';
+import EditorSubPanel from '@/components/Editor/EditorSubPanel';
 
 export default function Home() {
+  const { 
+    purchaseId, 
+    generatePurchaseId, 
+    sleeves, 
+    addSleeve, 
+    activeSleeveId 
+  } = useStore();
+  
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
+
+  useEffect(() => {
+    if (!purchaseId) {
+      generatePurchaseId();
+    }
+    if (sleeves.length === 0) {
+      addSleeve();
+    }
+  }, [purchaseId, generatePurchaseId, sleeves.length, addSleeve]);
+
+  const handleCheckout = async () => {
+    setIsCheckingOut(true);
+    try {
+      const payload = {
+        purchaseId,
+        sleeves: sleeves.map(s => ({ id: s.id, name: s.name, previewUrl: s.previewUrl }))
+      };
+      const res = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        alert(`Successfully added to basket! (Order ID: ${purchaseId})`);
+      } else {
+        alert('Failed to add to basket.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error during checkout.');
+    } finally {
+      setIsCheckingOut(false);
+    }
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="h-screen w-screen bg-background text-foreground flex flex-col overflow-hidden font-sans">
+      {/* Top Header */}
+      <header className="h-16 border-b border-border bg-[#181818] flex justify-between items-center px-6 flex-shrink-0 z-20">
+        <div className="flex items-center">
+          <h1 className="text-xl font-bold tracking-tight text-primary">TCG CUSTOM SLEEVES</h1>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+        
+        <div className="flex items-center gap-4">
+          <span className="text-sm text-muted-foreground font-mono">
+            ID: {purchaseId}
+          </span>
+          <button 
+            onClick={handleCheckout}
+            disabled={isCheckingOut}
+            className="px-6 py-2 rounded-full bg-primary text-black font-serif italic font-bold hover:brightness-110 transition-all shadow-[0_0_15px_rgba(242,206,27,0.4)] disabled:opacity-50"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            {isCheckingOut ? 'Processing...' : 'Add to Basket'}
+          </button>
         </div>
-      </main>
-    </div>
+      </header>
+
+      {/* Main Workspace */}
+      <div className="flex-1 flex overflow-hidden">
+        
+        {/* Left Sidebars */}
+        <div className="flex h-full flex-shrink-0">
+          <EditorSidebar />
+          <EditorSubPanel />
+        </div>
+
+        {/* Center Canvas */}
+        <section className="flex-1 relative bg-[#2b2b2b] flex items-center justify-center overflow-hidden">
+          {activeSleeveId ? (
+            <CanvasEditor key={activeSleeveId} />
+          ) : (
+            <div className="text-muted-foreground italic">No sleeve selected</div>
+          )}
+        </section>
+
+        {/* Right Sidebar: Order Details & Preview */}
+        <aside className="w-80 border-l border-border bg-[#1e1e1e] flex flex-col flex-shrink-0 z-10">
+          <div className="p-4 border-b border-border flex-shrink-0">
+            <h2 className="text-sm font-semibold uppercase text-muted-foreground">Order Overview</h2>
+          </div>
+          
+          {/* Multi-Sleeve List */}
+          <div className="flex-1 overflow-y-auto">
+            <MultiSleeveList />
+          </div>
+
+          {/* 3D Preview at the bottom */}
+          <div className="h-64 border-t border-border bg-black relative flex-shrink-0 flex flex-col">
+            <div className="p-2 border-b border-border bg-[#181818] z-10">
+              <h2 className="text-xs font-semibold uppercase text-muted-foreground">3D Preview</h2>
+            </div>
+            <div className="flex-1">
+              <Mockup3D />
+            </div>
+          </div>
+        </aside>
+      </div>
+    </main>
   );
 }
