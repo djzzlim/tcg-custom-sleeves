@@ -1,36 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Custom TCG Sleeve Editor
+
+A high-fidelity, interactive Custom Sleeve Editor designed for creating and previewing custom Trading Card Game (TCG) sleeves in real-time. Built with a robust 2D canvas editor and a stunning 3D interactive mockup viewer, this platform allows users to design professional-grade card sleeves with ease.
+
+## Key Features
+
+- **2D Canvas Editor:** Powered by Fabric.js. Users can upload images, add typography, and apply custom SVG frames. Features smart bounding constraints so uploaded backgrounds perfectly cover the sleeve without leaking the background.
+- **Real-time 3D Preview:** Powered by Three.js and React Three Fiber. Instantly view the 2D canvas design seamlessly wrapped onto a 3D sleeve model. Includes continuous slow rotation for a premium viewing experience.
+- **Custom SVG Frame Engine:** Includes a custom Node.js script that procedurally generates 10 unique, scale-independent SVG borders (Standard, Fade, Torn, Leaves, Clouds, Wavy, Checkerboard, etc.). 
+- **Global State Management:** Utilizes Zustand to maintain a highly performant and seamless sync between the 2D UI, the 2D canvas, and the 3D viewer.
+
+## Tech Stack
+
+- **Framework:** Next.js (App Router), React
+- **Styling:** Tailwind CSS, Lucide React (Icons)
+- **2D Engine:** Fabric.js
+- **3D Engine:** Three.js, `@react-three/fiber`, `@react-three/drei`
+- **State Management:** Zustand
+
+## Project Structure
+
+```text
+├── public/
+│   ├── frames/                 # Generated SVG frame assets (01.svg to 10.svg)
+│   └── models/                 # 3D assets (e.g., sleeve.glb)
+├── scripts/
+│   └── generate-frames.js      # Procedural geometry script to generate the SVG frames
+├── src/
+│   ├── app/                    # Next.js App Router (page.tsx, layout.tsx, globals.css)
+│   ├── components/
+│   │   ├── Editor/             # 2D Canvas & Editor UI
+│   │   │   ├── CanvasEditor.tsx  # Core Fabric.js engine (Panning, Text, Frames)
+│   │   │   ├── EditorSidebar.tsx # Main sidebar navigation
+│   │   │   └── EditorSubPanel.tsx# Contextual panels (Image Upload, Text Controls, Frame Grid)
+│   │   ├── Layout/             # Global layout wrappers
+│   │   └── Preview/            # 3D Render space
+│   │       └── Mockup3D.tsx      # React Three Fiber canvas mapping the 2D texture to 3D
+│   ├── lib/
+│   │   └── events.ts           # Event dispatchers for decoupling UI from the Canvas
+│   └── store/
+│       └── useStore.ts         # Zustand global state (tracks selected items, text props, etc.)
+```
 
 ## Getting Started
 
-First, run the development server:
+First, ensure you have dependencies installed:
+
+```bash
+npm install
+```
+
+### Generating Frames
+If you need to regenerate the mathematically perfect SVG frames, run the generation script:
+```bash
+node scripts/generate-frames.js
+```
+*This will output the 10 SVG files into the `public/frames/` directory.*
+
+### Running the App
+Run the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Future Integration
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Order Processing:** The `src/app/api/checkout/route.ts` endpoint acts as a skeleton for pushing final designs to Shopify / Google Sheets via webhooks when a user checks out.
