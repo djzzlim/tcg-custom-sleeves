@@ -163,32 +163,40 @@ export default function CanvasEditor() {
           existing.forEach(obj => cvs.remove(obj));
 
           if (type !== 'none') {
-            const frameOptions: Record<string, { stroke: string; strokeWidth: number }> = {
-              'black': { stroke: '#000000', strokeWidth: 16 },
-              'white': { stroke: '#ffffff', strokeWidth: 16 },
-              'silver': { stroke: '#c0c0c0', strokeWidth: 16 },
-              'gold': { stroke: '#ffd700', strokeWidth: 16 },
-              'copper': { stroke: '#b87333', strokeWidth: 16 },
-            };
-            const opt = frameOptions[type];
-            if (opt) {
-              const border = new Rect({
-                width: CANVAS_WIDTH - opt.strokeWidth,
-                height: CANVAS_HEIGHT - opt.strokeWidth,
-                left: CANVAS_WIDTH / 2,
-                top: CANVAS_HEIGHT / 2,
-                originX: 'center',
-                originY: 'center',
-                fill: 'transparent',
-                stroke: opt.stroke,
-                strokeWidth: opt.strokeWidth,
-                selectable: false,
-                evented: false,
-                hoverCursor: 'default',
+            const frameSrc = {
+              'standard': '/frames/01.svg',
+              'fade': '/frames/02.svg',
+              'torn1': '/frames/03.svg',
+              'torn2': '/frames/04.svg',
+              'wobble': '/frames/05.svg',
+              'floral': '/frames/06.svg',
+              'scallop': '/frames/07.svg',
+              'stamp': '/frames/08.svg',
+              'wavy': '/frames/09.svg',
+              'zigzag': '/frames/10.svg',
+            }[type as string];
+
+            if (frameSrc) {
+              FabricImage.fromURL(frameSrc).then((img) => {
+                img.set({
+                  left: CANVAS_WIDTH / 2,
+                  top: CANVAS_HEIGHT / 2,
+                  originX: 'center',
+                  originY: 'center',
+                  scaleX: 1,
+                  scaleY: 1,
+                  selectable: false,
+                  evented: false,
+                  hoverCursor: 'default',
+                });
+                (img as any).isFrame = true;
+                cvs.add(img);
+                cvs.bringObjectToFront(img);
+                cvs.renderAll();
+                saveToStore();
               });
-              (border as any).isFrame = true;
-              cvs.add(border);
-              cvs.bringObjectToFront(border);
+              // Return early because saveToStore is called async
+              return;
             }
           }
           cvs.renderAll();

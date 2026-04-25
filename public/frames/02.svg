@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 560" width="400" height="560">
+  <defs>
+    <filter id="blur" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="25"/>
+    </filter>
+  </defs>
+  <!-- Blurred inner white glow fading inwards -->
+  <rect x="20" y="20" width="360" height="520" fill="none" stroke="white" stroke-width="40" filter="url(#blur)" opacity="1" />
+  <!-- Solid white border on top -->
+  <path d="M0,0 H400 V560 H0 Z M20,20 V540 H380 V20 Z" fill="white" fill-rule="evenodd" />
+</svg>

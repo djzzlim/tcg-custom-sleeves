@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 560" width="400" height="560">
+    <defs>
+      <filter id="shadow">
+        <feDropShadow dx="0" dy="0" stdDeviation="4" flood-opacity="0.3"/>
+      </filter>
+      
+    </defs>
+    <path d="M0,0 H400 V560 H0 Z M20,20 V540 H380 V20 Z" fill="white"/>
+  </svg>

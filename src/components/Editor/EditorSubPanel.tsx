@@ -49,23 +49,38 @@ export default function EditorSubPanel() {
 
       {activeTab === 'Frames' && (
         <div className="flex flex-col gap-4">
-          <p className="text-sm text-muted-foreground">Choose a frame style (e.g., No border):</p>
-          <div className="grid grid-cols-2 gap-2">
-            {['none', 'black', 'white', 'silver', 'gold', 'copper'].map((frameType) => (
+          <p className="text-sm text-foreground">Choose a frame style (e.g., Wobble):</p>
+          <div className="grid grid-cols-2 gap-[2px] bg-border p-[2px] border border-border">
+            {[
+              { id: 'standard', src: '/frames/01.svg' },
+              { id: 'fade', src: '/frames/02.svg' },
+              { id: 'torn1', src: '/frames/03.svg' },
+              { id: 'torn2', src: '/frames/04.svg' },
+              { id: 'wobble', src: '/frames/05.svg' },
+              { id: 'floral', src: '/frames/06.svg' },
+              { id: 'scallop', src: '/frames/07.svg' },
+              { id: 'stamp', src: '/frames/08.svg' },
+              { id: 'wavy', src: '/frames/09.svg' },
+              { id: 'zigzag', src: '/frames/10.svg' },
+            ].map((frame) => (
               <button
-                key={frameType}
-                onClick={() => dispatchCanvasAction({ type: 'APPLY_FRAME', payload: frameType })}
-                className="aspect-square bg-card border border-border hover:border-primary rounded-sm flex items-center justify-center relative overflow-hidden transition-colors"
+                key={frame.id}
+                onClick={() => dispatchCanvasAction({ type: 'APPLY_FRAME', payload: frame.id })}
+                className="aspect-[4/5] bg-[#f2ce1b] hover:brightness-110 relative overflow-hidden flex items-center justify-center transition-all group border-2 border-transparent hover:border-primary"
               >
-                <span className="text-xs uppercase font-bold text-muted-foreground z-10">{frameType}</span>
-                {frameType !== 'none' && (
-                  <div className="absolute inset-0 border-8 pointer-events-none" 
-                       style={{ borderColor: frameType === 'black' ? '#000' : frameType === 'white' ? '#fff' : frameType === 'silver' ? '#c0c0c0' : frameType === 'gold' ? '#ffd700' : '#b87333' }} 
-                  />
-                )}
+                <div className="w-[85%] h-[85%] bg-[#a8a497] rotate-[-5deg] relative transition-transform group-hover:rotate-0 flex items-center justify-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={frame.src} alt={frame.id} className="absolute inset-0 w-full h-full object-fill pointer-events-none" />
+                </div>
               </button>
             ))}
           </div>
+          <button 
+            onClick={() => dispatchCanvasAction({ type: 'APPLY_FRAME', payload: 'none' })}
+            className="w-full py-2 mt-2 border border-border rounded text-sm hover:bg-muted text-muted-foreground transition-colors"
+          >
+            Remove Frame
+          </button>
         </div>
       )}
 
