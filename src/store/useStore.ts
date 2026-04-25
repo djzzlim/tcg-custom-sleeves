@@ -13,6 +13,7 @@ interface AppState {
   purchaseId: string;
   sleeves: SleeveDesign[];
   activeSleeveId: string | null;
+  nextSleeveNumber: number;
   remarks: string;
   activeTab: EditorTab;
   
@@ -57,6 +58,8 @@ export const useStore = create<AppState>((set) => ({
     textAlign: 'center',
   },
 
+  nextSleeveNumber: 1,
+
   generatePurchaseId: () => {
 
     const id = 'PUR-' + Math.random().toString(36).substring(2, 9).toUpperCase();
@@ -67,11 +70,12 @@ export const useStore = create<AppState>((set) => ({
     const newId = crypto.randomUUID();
     const newSleeve: SleeveDesign = {
       id: newId,
-      name: `Sleeve #${state.sleeves.length + 1}`,
+      name: `Sleeve #${state.nextSleeveNumber}`,
     };
     return {
       sleeves: [...state.sleeves, newSleeve],
       activeSleeveId: newId,
+      nextSleeveNumber: state.nextSleeveNumber + 1,
     };
   }),
 
