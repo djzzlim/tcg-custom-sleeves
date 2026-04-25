@@ -88,7 +88,7 @@ export default function CanvasEditor() {
         });
       }
     });
-    
+
     const saveToStore = () => {
       const currentId = latestSleeveIdRef.current;
       if (!fabricCanvas.current || !currentId || isLoadingRef.current) return;
@@ -99,7 +99,7 @@ export default function CanvasEditor() {
 
     canvas.on('object:modified', (e) => {
       if (isLoadingRef.current) return;
-      
+
       const obj = e.target;
       if (obj && obj.type === 'i-text') {
         const textObj = obj as IText;
@@ -115,7 +115,7 @@ export default function CanvasEditor() {
       updateActiveObjectState();
       saveToStore();
     });
-    
+
     canvas.on('object:added', (e) => {
       if (isLoadingRef.current) return;
       // Keep text above images
@@ -131,7 +131,7 @@ export default function CanvasEditor() {
       }
       saveToStore();
     });
-    
+
     canvas.on('object:removed', () => {
       if (isLoadingRef.current) return;
       saveToStore();
