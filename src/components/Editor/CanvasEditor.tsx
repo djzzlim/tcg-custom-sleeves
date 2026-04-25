@@ -138,6 +138,9 @@ export default function CanvasEditor() {
                 top: CANVAS_HEIGHT / 2,
                 originX: 'center',
                 originY: 'center',
+                hasControls: false,
+                lockScalingX: true,
+                lockScalingY: true,
               });
               cvs.add(img);
               // Do not send to back, let it stack above older images, but below text/frames
