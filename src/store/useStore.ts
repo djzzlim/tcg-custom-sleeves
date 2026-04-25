@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type EditorTab = 'Photos' | 'Layouts' | 'Frames' | 'Text' | 'Sticker' | 'Photo Frame' | 'Emojis' | null;
+export type EditorTab = 'Photos' | 'Frames' | 'Text' | null;
 
 export interface SleeveDesign {
   id: string;

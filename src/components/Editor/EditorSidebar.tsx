@@ -3,23 +3,15 @@
 import { useStore, EditorTab } from '@/store/useStore';
 import { 
   Image as ImageIcon, 
-  LayoutTemplate, 
   Frame, 
-  Type, 
-  Sticker, 
-  ImagePlus, 
-  Smile 
+  Type 
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const tabs: { id: EditorTab; label: string; icon: any }[] = [
   { id: 'Photos', label: 'Photos', icon: ImageIcon },
-  { id: 'Layouts', label: 'Layouts', icon: LayoutTemplate },
   { id: 'Frames', label: 'Frames', icon: Frame },
   { id: 'Text', label: 'Text', icon: Type },
-  { id: 'Sticker', label: 'Sticker', icon: Sticker },
-  { id: 'Photo Frame', label: 'Photo Frame', icon: ImagePlus },
-  { id: 'Emojis', label: 'Emojis', icon: Smile },
 ];
 
 export default function EditorSidebar() {
