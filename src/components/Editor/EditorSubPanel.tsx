@@ -55,8 +55,8 @@ export default function EditorSubPanel() {
               <p className="text-xs text-muted-foreground mb-2">Click anywhere else on the canvas to see other frames.</p>
               <div className="flex flex-col gap-2">
                 <label className="text-xs text-muted-foreground">Color</label>
-                <input 
-                  type="color" 
+                <input
+                  type="color"
                   value={textProps.fill || "#ffffff"}
                   onChange={(e) => dispatchCanvasAction({ type: 'CHANGE_FRAME_COLOR', payload: e.target.value })}
                   className="w-full h-10 p-0 bg-transparent border border-border rounded cursor-pointer"
@@ -71,7 +71,7 @@ export default function EditorSubPanel() {
             </div>
           ) : (
             <>
-              <p className="text-sm text-foreground">Choose a frame style (e.g., Wobble):</p>
+              <p className="text-sm text-foreground">Choose a frame style:</p>
               <div className="grid grid-cols-2 gap-[2px] bg-border p-[2px] border border-border">
                 {[
                   { id: 'standard', src: '/frames/01.svg?v=8' },
