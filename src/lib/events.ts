@@ -6,7 +6,8 @@ export type CanvasAction =
   | { type: 'SET_TEXT_ALIGN'; payload: 'left' | 'center' | 'right' }
   | { type: 'CHANGE_FONT_SIZE'; payload: number }
   | { type: 'CHANGE_FONT_FAMILY'; payload: string }
-  | { type: 'CHANGE_COLOR'; payload: string };
+  | { type: 'CHANGE_COLOR'; payload: string }
+  | { type: 'CHANGE_FRAME_COLOR'; payload: string };
 
 export const dispatchCanvasAction = (action: CanvasAction) => {
   window.dispatchEvent(new CustomEvent('CANVAS_ACTION', { detail: action }));

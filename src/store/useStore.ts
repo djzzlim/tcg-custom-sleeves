@@ -16,7 +16,7 @@ interface AppState {
   nextSleeveNumber: number;
   remarks: string;
   activeTab: EditorTab;
-  
+
   // Editor state
   activeObjectType: string | null;
   textProps: {
@@ -87,21 +87,21 @@ export const useStore = create<AppState>((set) => ({
     const newSleeves = state.sleeves.filter((s) => s.id !== id);
     return {
       sleeves: newSleeves,
-      activeSleeveId: state.activeSleeveId === id 
+      activeSleeveId: state.activeSleeveId === id
         ? (newSleeves.length > 0 ? newSleeves[0].id : null)
         : state.activeSleeveId
     };
   }),
 
   setActiveSleeve: (id) => set({ activeSleeveId: id }),
-  
+
   setRemarks: (remarks) => set({ remarks }),
 
   setActiveTab: (tab) => set({ activeTab: tab }),
 
   setActiveObjectType: (type) => set({ activeObjectType: type }),
 
-  setTextProps: (props) => set((state) => ({ 
-    textProps: { ...state.textProps, ...props } 
+  setTextProps: (props) => set((state) => ({
+    textProps: { ...state.textProps, ...props }
   })),
 }));

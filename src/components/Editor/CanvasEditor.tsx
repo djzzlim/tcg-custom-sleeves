@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { useStore } from '@/store/useStore';
 import { CanvasAction } from '@/lib/events';
-import { Canvas, IText, FabricImage, Rect } from 'fabric';
+import { Canvas, IText, FabricImage, Rect, filters } from 'fabric';
 
 const CANVAS_WIDTH = 400;
 const CANVAS_HEIGHT = 560; // 5:7 ratio
@@ -12,7 +12,7 @@ export default function CanvasEditor() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fabricCanvas = useRef<Canvas | null>(null);
   const isLoadingRef = useRef(false);
-  const { activeSleeveId, updateSleeve, sleeves, setActiveObjectType, setTextProps } = useStore();
+  const { activeSleeveId, updateSleeve, sleeves, setActiveObjectType, setTextProps, setActiveTab } = useStore();
 
   const latestSleeveIdRef = useRef(activeSleeveId);
   useEffect(() => {
@@ -38,8 +38,13 @@ export default function CanvasEditor() {
         return;
       }
       setActiveObjectType(active.type);
-      if (active.type === 'i-text') {
+      if ((active as any).isFrame) {
+        setActiveObjectType('frame');
+        setTextProps({ fill: (active as any).customColor || '#ffffff' });
+        setActiveTab('Frames');
+      } else if (active.type === 'i-text') {
         const textObj = active as IText;
+        setActiveTab('Text');
         setTextProps({
           fontFamily: textObj.fontFamily,
           fontSize: textObj.fontSize || 32,
@@ -88,18 +93,18 @@ export default function CanvasEditor() {
         });
       }
     });
-    
+
     const saveToStore = () => {
       const currentId = latestSleeveIdRef.current;
       if (!fabricCanvas.current || !currentId || isLoadingRef.current) return;
-      const json = JSON.stringify(fabricCanvas.current.toJSON());
+      const json = JSON.stringify(fabricCanvas.current.toJSON(['isFrame', 'customColor']));
       const dataUrl = fabricCanvas.current.toDataURL({ format: 'jpeg', quality: 0.8, multiplier: 1 });
       updateSleeve(currentId, { canvasData: json, previewUrl: dataUrl });
     };
 
     canvas.on('object:modified', (e) => {
       if (isLoadingRef.current) return;
-      
+
       const obj = e.target;
       if (obj && obj.type === 'i-text') {
         const textObj = obj as IText;
@@ -115,7 +120,7 @@ export default function CanvasEditor() {
       updateActiveObjectState();
       saveToStore();
     });
-    
+
     canvas.on('object:added', (e) => {
       if (isLoadingRef.current) return;
       // Keep text above images
@@ -131,7 +136,7 @@ export default function CanvasEditor() {
       }
       saveToStore();
     });
-    
+
     canvas.on('object:removed', () => {
       if (isLoadingRef.current) return;
       saveToStore();
@@ -214,11 +219,20 @@ export default function CanvasEditor() {
                   originY: 'center',
                   scaleX: 1,
                   scaleY: 1,
-                  selectable: false,
-                  evented: false,
+                  selectable: true,
+                  evented: true,
+                  lockMovementX: true,
+                  lockMovementY: true,
+                  lockScalingX: true,
+                  lockScalingY: true,
+                  lockRotation: true,
+                  hasControls: false,
+                  hasBorders: true,
+                  perPixelTargetFind: true,
                   hoverCursor: 'default',
                 });
                 (img as any).isFrame = true;
+                (img as any).customColor = '#ffffff';
                 cvs.add(img);
                 cvs.bringObjectToFront(img);
                 cvs.renderAll();
@@ -286,6 +300,28 @@ export default function CanvasEditor() {
           saveToStore();
           break;
         }
+        case 'CHANGE_FRAME_COLOR': {
+          const frame = cvs.getObjects().find((o: any) => o.isFrame) as FabricImage;
+          if (!frame) break;
+          
+          (frame as any).customColor = action.payload;
+          
+          if (action.payload === '#ffffff') {
+            frame.filters = [];
+          } else {
+            const filter = new filters.BlendColor({
+              color: action.payload,
+              mode: 'multiply',
+              alpha: 1
+            });
+            frame.filters = [filter];
+          }
+          frame.applyFilters();
+          cvs.renderAll();
+          updateActiveObjectState();
+          saveToStore();
+          break;
+        }
       }
     };
 
@@ -338,6 +374,10 @@ export default function CanvasEditor() {
     }
   }, [activeSleeveId]); // We omit sleeves from deps to prevent infinite loops
 
+  const FONT_FAMILIES = [
+    'Inter', 'Outfit'
+  ];
+
   return (
     <div className="flex flex-col items-center justify-center w-full h-full p-8 overflow-auto bg-[#2b2b2b]">
       <div className="relative shadow-[0_0_50px_rgba(0,0,0,0.8)] ring-1 ring-white/10 overflow-hidden bg-black flex-shrink-0">
@@ -346,6 +386,13 @@ export default function CanvasEditor() {
       <p className="mt-8 text-[10px] text-muted-foreground uppercase tracking-[0.2em]">
         Standard Sleeve (5:7 Ratio)
       </p>
+
+      {/* Hidden preloader to force browser to download fonts before Canvas needs them */}
+      <div style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', zIndex: -1 }}>
+        {FONT_FAMILIES.map(font => (
+          <span key={font} style={{ fontFamily: font }}>preload</span>
+        ))}
+      </div>
     </div>
   );
 }
