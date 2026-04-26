@@ -6,6 +6,20 @@ import { useStore } from '@/store/useStore';
 import * as THREE from 'three';
 import { Suspense, useState, useEffect, useRef } from 'react';
 
+// Suppress known Three.js deprecation warnings coming from R3F internals
+if (typeof window !== 'undefined') {
+  const originalWarn = console.warn;
+  console.warn = (...args) => {
+    if (typeof args[0] === 'string' && (
+      args[0].includes('THREE.Clock:') ||
+      args[0].includes('PCFSoftShadowMap has been deprecated')
+    )) {
+      return;
+    }
+    originalWarn(...args);
+  };
+}
+
 function SleeveModel({ textureUrl }: { textureUrl?: string }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const [texture, setTexture] = useState<THREE.Texture | null>(null);
@@ -69,7 +83,7 @@ export default function Mockup3D() {
 
   return (
     <div className="w-full h-full">
-      <Canvas shadows>
+      <Canvas shadows={{ type: THREE.PCFShadowMap }}>
         <color attach="background" args={['#2a2a2a']} />
         <PerspectiveCamera makeDefault position={[0, 0, 12]} fov={45} />
         <OrbitControls 
