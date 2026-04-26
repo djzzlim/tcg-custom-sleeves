@@ -16,6 +16,32 @@ export default function CheckoutPage() {
     setIsMounted(true);
   }, []);
 
+  // early return moved after hooks
+
+  // Payment processing state and handler
+  const [isProcessing, setIsProcessing] = useState(false);
+  const handleProceedToPayment = async () => {
+    setIsProcessing(true);
+    try {
+      const res = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ purchaseId, sleeves }),
+      });
+      const data = await res.json();
+      if (data?.paymentUrl) {
+        // Redirect to payment gateway if provided
+        window.location.href = data.paymentUrl;
+      } else {
+        alert('Payment flow not yet configured.');
+      }
+    } catch (e) {
+      console.error('Payment initiation error', e);
+      alert('Unable to start payment.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
   if (!isMounted) return null;
 
   const totalSleeves = sleeves.reduce((acc, s) => acc + (s.quantity || 10), 0);
@@ -125,10 +151,11 @@ export default function CheckoutPage() {
 
             <button 
               className="w-full py-4 bg-primary text-black font-bold uppercase tracking-wider rounded flex items-center justify-center gap-2 hover:brightness-110 transition-all"
-              onClick={() => alert('Proceeding to secure payment gateway...')}
+              onClick={handleProceedToPayment}
+              disabled={isProcessing}
             >
               <CreditCard size={20} />
-              Proceed to Payment
+              {isProcessing ? 'Processing...' : 'Proceed to Payment'}
             </button>
             
             <p className="text-center text-xs text-muted-foreground mt-4">

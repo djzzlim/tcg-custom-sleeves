@@ -1,23 +1,18 @@
 import { NextResponse } from 'next/server';
 
+/**
+ * This endpoint should create a payment session with Shopify or Stripe.
+ * For now it returns a mock response without logging the order.
+ * The real order will be recorded only when the payment webhook fires.
+ */
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { purchaseId, sleeves } = body;
-
-    console.log(`[CHECKOUT] Received order ${purchaseId} with ${sleeves.length} sleeves.`);
-    
-    // Here we would normally map the data and send it to a Google Sheets Webhook or App Script URL.
-    // For example:
-    // await fetch(GOOGLE_SHEETS_WEBHOOK_URL, {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify({ purchaseId, sleeves: sleeves.map(s => s.previewUrl) })
-    // });
-
-    return NextResponse.json({ success: true, message: 'Order sent to mock Google Sheet' });
+    // In a real implementation you would call Shopify/Stripe to create a checkout session
+    // and obtain a payment URL. Here we just echo back a placeholder.
+    return NextResponse.json({ success: true, paymentUrl: null });
   } catch (error) {
-    console.error('Checkout error:', error);
+    console.error('Checkout session creation error:', error);
     return NextResponse.json({ success: false, message: 'Internal Server Error' }, { status: 500 });
   }
 }
