@@ -22,7 +22,7 @@ export default function CheckoutPage() {
   const subtotal = totalSleeves * PRICE_PER_SLEEVE;
 
   return (
-    <main className="min-h-screen bg-background text-foreground font-sans flex flex-col">
+    <main className="h-screen overflow-y-auto bg-background text-foreground font-sans flex flex-col">
       {/* Header */}
       <header className="h-16 border-b border-border bg-[#181818] flex items-center px-6 flex-shrink-0 z-20 sticky top-0">
         <button 
