@@ -154,6 +154,7 @@ export default function CanvasEditor() {
           reader.onload = (f) => {
             const data = f.target?.result as string;
             FabricImage.fromURL(data).then((img) => {
+              if (fabricCanvas.current !== cvs) return;
               const scale = Math.max(CANVAS_WIDTH / img.width, CANVAS_HEIGHT / img.height);
               img.set({
                 scaleX: scale,
@@ -167,7 +168,6 @@ export default function CanvasEditor() {
                 lockScalingY: true,
               });
               cvs.add(img);
-              // Do not send to back, let it stack above older images, but below text/frames
               cvs.renderAll();
               saveToStore();
             });
@@ -212,6 +212,7 @@ export default function CanvasEditor() {
 
             if (frameSrc) {
               FabricImage.fromURL(frameSrc).then((img) => {
+                if (fabricCanvas.current !== cvs) return;
                 img.set({
                   left: CANVAS_WIDTH / 2,
                   top: CANVAS_HEIGHT / 2,
@@ -238,7 +239,6 @@ export default function CanvasEditor() {
                 cvs.renderAll();
                 saveToStore();
               });
-              // Return early because saveToStore is called async
               return;
             }
           }
@@ -346,7 +346,16 @@ export default function CanvasEditor() {
     return () => {
       window.removeEventListener('CANVAS_ACTION', handleCanvasAction);
       window.removeEventListener('keydown', handleKeyDown);
-      canvas.dispose();
+      try {
+        // Prevent lingering async callbacks (like loadFromJSON) from crashing after unmount
+        canvas.clearContext = () => canvas;
+        canvas.clear = () => canvas;
+        canvas.renderAll = () => canvas;
+        canvas.requestRenderAll = () => canvas;
+        canvas.dispose();
+      } catch (e) {
+        // Ignore dispose errors on unmount
+      }
       fabricCanvas.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -362,12 +371,13 @@ export default function CanvasEditor() {
 
     if (activeSleeve?.canvasData) {
       canvas.loadFromJSON(JSON.parse(activeSleeve.canvasData)).then(() => {
+        if (fabricCanvas.current !== canvas) return;
         canvas.renderAll();
         // Allow events to settle before enabling saveToStore
         setTimeout(() => { isLoadingRef.current = false; }, 50);
       });
     } else {
-      canvas.clear();
+      canvas.remove(...canvas.getObjects());
       canvas.backgroundColor = '#000000';
       canvas.renderAll();
       setTimeout(() => { isLoadingRef.current = false; }, 50);

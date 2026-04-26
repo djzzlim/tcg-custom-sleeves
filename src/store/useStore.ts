@@ -7,6 +7,7 @@ export interface SleeveDesign {
   name: string;
   canvasData?: string; // JSON string from fabric.js
   previewUrl?: string; // Data URL for thumbnail/preview
+  quantity?: number; // Order quantity
 }
 
 interface AppState {
@@ -71,6 +72,7 @@ export const useStore = create<AppState>((set) => ({
     const newSleeve: SleeveDesign = {
       id: newId,
       name: `Sleeve #${state.nextSleeveNumber}`,
+      quantity: 10,
     };
     return {
       sleeves: [...state.sleeves, newSleeve],

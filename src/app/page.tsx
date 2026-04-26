@@ -9,8 +9,10 @@ import EditorSidebar from '@/components/Editor/EditorSidebar';
 import EditorSubPanel from '@/components/Editor/EditorSubPanel';
 
 import { ShoppingCart } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 export default function Home() {
+  const router = useRouter();
   const { 
     purchaseId, 
     generatePurchaseId, 
@@ -30,29 +32,9 @@ export default function Home() {
     }
   }, [purchaseId, generatePurchaseId, sleeves.length, addSleeve]);
 
-  const handleCheckout = async () => {
-    setIsCheckingOut(true);
-    try {
-      const payload = {
-        purchaseId,
-        sleeves: sleeves.map(s => ({ id: s.id, name: s.name, previewUrl: s.previewUrl }))
-      };
-      const res = await fetch('/api/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      if (res.ok) {
-        alert(`Successfully added to basket! (Order ID: ${purchaseId})`);
-      } else {
-        alert('Failed to add to basket.');
-      }
-    } catch (err) {
-      console.error(err);
-      alert('Error during checkout.');
-    } finally {
-      setIsCheckingOut(false);
-    }
+  const handleCheckout = () => {
+    // Use client-side routing to preserve Zustand state
+    router.push('/checkout');
   };
 
   return (
