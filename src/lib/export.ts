@@ -26,7 +26,8 @@ export async function exportDesignToHighRes(json: string, height: number = 560, 
 
     // Export with multiplier for high resolution
     const dataUrl = canvas.toDataURL({
-      format: 'png',
+      format: 'jpeg',
+      quality: 0.85,
       multiplier: multiplier,
       enableRetinaScaling: true,
     });

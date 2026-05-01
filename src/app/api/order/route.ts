@@ -7,7 +7,7 @@ import { NextResponse } from 'next/server';
  */
 export async function POST(request: Request) {
   try {
-    const { purchaseId, remarks, designs } = await request.json();
+    const { purchaseId, remarks, designs, customerName, customerEmail } = await request.json();
 
     if (!purchaseId || !designs || !Array.isArray(designs)) {
       return NextResponse.json({ success: false, message: 'Missing order data' }, { status: 400 });
@@ -27,7 +27,9 @@ export async function POST(request: Request) {
         purchaseId,
         remarks,
         designs, // Includes the base64 dataUrl
-        status: 'Pending'
+        customerName,
+        customerEmail,
+        status: 'Unpaid'
       }),
     });
 

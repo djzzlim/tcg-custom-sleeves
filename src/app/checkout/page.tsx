@@ -6,7 +6,7 @@ import { ChevronLeft, Minus, Plus, CreditCard } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { exportDesignToHighRes } from '@/lib/export';
 
-const PRICE_PER_SLEEVE = 0.50;
+const PRICE_PER_SLEEVE = 1.00;
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -21,13 +21,21 @@ export default function CheckoutPage() {
 
   // Payment processing state and handler
   const [status, setStatus] = useState<'idle' | 'exporting' | 'uploading' | 'success' | 'error'>('idle');
+  const [customerName, setCustomerName] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
 
   const handleProceedToPayment = async () => {
     if (sleeves.length === 0) return;
     setStatus('exporting');
     
     try {
-      // 0. Pre-check for empty designs
+      // 0. Pre-check for empty designs and contact info
+      if (!customerName.trim() || !customerEmail.trim()) {
+        alert('Please provide your name and email address before proceeding.');
+        setStatus('idle');
+        return;
+      }
+
       const emptyDesignIndex = sleeves.findIndex(s => !s.canvasData);
       if (emptyDesignIndex !== -1) {
         const designName = sleeves[emptyDesignIndex].name || `Design #${emptyDesignIndex + 1}`;
@@ -43,7 +51,9 @@ export default function CheckoutPage() {
           const highResDataUrl = await exportDesignToHighRes(sleeve.canvasData!, height, 4);
           return {
             name: sleeve.name || `Design ${index + 1}`,
-            dataUrl: highResDataUrl
+            dataUrl: highResDataUrl,
+            quantity: sleeve.quantity || 10,
+            sleeveType: sleeve.sleeveType || 'Standard'
           };
         })
       );
@@ -55,6 +65,8 @@ export default function CheckoutPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           purchaseId,
+          customerName,
+          customerEmail,
           designs: designPayloads,
           remarks: "From Basket Checkout"
         }),
@@ -185,17 +197,39 @@ export default function CheckoutPage() {
               </div>
             </div>
 
+            <div className="flex flex-col gap-4 mb-8">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Customer Information</h3>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs text-muted-foreground ml-1">Full Name</label>
+                <input 
+                  type="text" 
+                  placeholder="John Doe"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  className="w-full bg-background border border-border rounded-lg px-4 py-2.5 text-sm focus:ring-1 focus:ring-primary outline-none transition-all"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs text-muted-foreground ml-1">Email Address</label>
+                <input 
+                  type="email" 
+                  placeholder="john@example.com"
+                  value={customerEmail}
+                  onChange={(e) => setCustomerEmail(e.target.value)}
+                  className="w-full bg-background border border-border rounded-lg px-4 py-2.5 text-sm focus:ring-1 focus:ring-primary outline-none transition-all"
+                />
+              </div>
+            </div>
+
             <button 
               className="w-full py-4 bg-primary text-black font-bold uppercase tracking-wider rounded flex items-center justify-center gap-2 hover:brightness-110 transition-all disabled:opacity-50"
               onClick={handleProceedToPayment}
               disabled={status === 'exporting' || status === 'uploading' || sleeves.length === 0}
             >
               <CreditCard size={20} />
-              {status === 'exporting' && 'Generating High-Res...'}
-              {status === 'uploading' && 'Saving to Drive...'}
-              {status === 'idle' && 'Proceed to Payment'}
-              {status === 'success' && 'Order Placed!'}
-              {status === 'error' && 'Retry Checkout'}
+              {(status === 'exporting' || status === 'uploading') ? 'Processing Order... Please don\'t refresh page' : 
+               status === 'idle' ? 'Proceed to Payment' : 
+               status === 'success' ? 'Order Placed!' : 'Retry Checkout'}
             </button>
             
             <p className="text-center text-xs text-muted-foreground mt-4">

@@ -6,6 +6,7 @@ import { CanvasAction } from '@/lib/events';
 import { Canvas, IText, FabricImage, Rect, filters } from 'fabric';
 import { cn } from '@/lib/utils';
 
+
 const CANVAS_WIDTH = 400;
 
 export default function CanvasEditor() {
@@ -104,7 +105,7 @@ export default function CanvasEditor() {
     const saveToStore = () => {
       const currentId = latestSleeveIdRef.current;
       if (!fabricCanvas.current || !currentId || isLoadingRef.current) return;
-      const json = JSON.stringify(fabricCanvas.current.toJSON(['isFrame', 'customColor']));
+      const json = JSON.stringify(fabricCanvas.current.toObject(['isFrame', 'customColor']));
       const dataUrl = fabricCanvas.current.toDataURL({ format: 'jpeg', quality: 0.8, multiplier: 1 });
       updateSleeve(currentId, { canvasData: json, previewUrl: dataUrl });
     };
@@ -223,9 +224,9 @@ export default function CanvasEditor() {
             if (frameSrc) {
               FabricImage.fromURL(frameSrc).then((img) => {
                 if (fabricCanvas.current !== cvs) return;
-                const scaleX = CANVAS_WIDTH / 400; 
-                const scaleY = cvsHeight / 560; 
-                
+                const scaleX = CANVAS_WIDTH / 400;
+                const scaleY = cvsHeight / 560;
+
                 img.set({
                   left: CANVAS_WIDTH / 2,
                   top: cvsHeight / 2,
@@ -316,9 +317,9 @@ export default function CanvasEditor() {
         case 'CHANGE_FRAME_COLOR': {
           const frame = cvs.getObjects().find((o: any) => o.isFrame) as FabricImage;
           if (!frame) break;
-          
+
           (frame as any).customColor = action.payload;
-          
+
           if (action.payload === '#ffffff') {
             frame.filters = [];
           } else {
@@ -382,10 +383,10 @@ export default function CanvasEditor() {
       const cvs = fabricCanvas.current;
       const oldHeight = cvs.height;
       const newHeight = currentHeight;
-      
+
       if (oldHeight !== newHeight) {
         const scaleFactor = newHeight / oldHeight;
-        
+
         cvs.setDimensions({
           width: CANVAS_WIDTH,
           height: newHeight
@@ -397,14 +398,14 @@ export default function CanvasEditor() {
           if (obj.top !== undefined) {
             obj.set('top', obj.top * scaleFactor);
           }
-          
+
           // 2. For frames: Force absolute scale to match the new height
           if ((obj as any).isFrame) {
             obj.set({
               scaleX: CANVAS_WIDTH / 400,
               scaleY: newHeight / 560
             });
-          } 
+          }
           // 3. For images: Scale uniformly to maintain aspect ratio
           else if (obj.type === 'image') {
             const currentScaleX = obj.scaleX || 1;
@@ -421,11 +422,11 @@ export default function CanvasEditor() {
               fontSize: currentFontSize * scaleFactor
             });
           }
-          
+
           // Update selection coordinates after moving/scaling
           obj.setCoords();
         });
-        
+
         cvs.renderAll();
       }
     }
@@ -462,7 +463,7 @@ export default function CanvasEditor() {
     <div className="flex flex-col items-center justify-center w-full h-full p-8 overflow-auto bg-[#2b2b2b]">
       {/* Size Toggle */}
       <div className="mb-6 flex bg-black/40 p-1 rounded-full border border-white/5 shadow-inner">
-        <button 
+        <button
           onClick={() => activeSleeveId && updateSleeve(activeSleeveId, { sleeveType: 'Standard' })}
           className={cn(
             "px-6 py-2 rounded-full text-xs font-bold transition-all uppercase tracking-wider",
@@ -471,7 +472,7 @@ export default function CanvasEditor() {
         >
           Standard
         </button>
-        <button 
+        <button
           onClick={() => activeSleeveId && updateSleeve(activeSleeveId, { sleeveType: 'Japanese' })}
           className={cn(
             "px-6 py-2 rounded-full text-xs font-bold transition-all uppercase tracking-wider",
