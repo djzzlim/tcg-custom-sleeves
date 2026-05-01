@@ -1,13 +1,20 @@
 import { google } from 'googleapis';
+import { Readable } from 'stream';
 
 
-const SCOPES = ['https://www.googleapis.com/auth/drive.file'];
+const SCOPES = ['https://www.googleapis.com/auth/drive'];
 
 /**
  * Initialise Google Drive client using a Service Account JSON stored in env.
  */
 export function getDriveClient() {
   const credentials = JSON.parse(process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON || '{}');
+  
+  // Fix for private key newlines if they are escaped in the JSON string
+  if (credentials.private_key) {
+    credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
+  }
+
   const auth = new google.auth.GoogleAuth({
     credentials,
     scopes: SCOPES,
@@ -15,17 +22,12 @@ export function getDriveClient() {
   return google.drive({ version: 'v3', auth });
 }
 
+
 /**
- * Upload a remote image (public URL) to Google Drive.
- * Returns a shareable link (anyone with link can view).
+ * Upload an image from a Buffer to Google Drive.
  */
-export async function uploadImageToDrive(imageUrl: string, fileName: string): Promise<string> {
+export async function uploadImageFromBuffer(buffer: Buffer, fileName: string, mimeType: string = 'image/png'): Promise<string> {
   const drive = getDriveClient();
-  // Fetch the image bytes
-  const response = await fetch(imageUrl);
-  // In Node.js, fetch returns a Response without .buffer(). Use arrayBuffer() and convert to Buffer.
-  const arrayBuffer = await response.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
 
   const fileMetadata: any = {
     name: fileName,
@@ -35,8 +37,8 @@ export async function uploadImageToDrive(imageUrl: string, fileName: string): Pr
   }
 
   const media = {
-    mimeType: response.headers.get('content-type') || 'image/png',
-    body: Buffer.from(buffer),
+    mimeType,
+    body: Readable.from(buffer),
   };
 
   const { data } = await drive.files.create({
@@ -54,6 +56,17 @@ export async function uploadImageToDrive(imageUrl: string, fileName: string): Pr
     },
   });
 
-  const result = `https://drive.google.com/file/d/${data.id}/view?usp=sharing`;
-  return result;
+  return `https://drive.google.com/file/d/${data.id}/view?usp=sharing`;
+}
+
+/**
+ * Upload a remote image (public URL) to Google Drive.
+ */
+export async function uploadImageToDrive(imageUrl: string, fileName: string): Promise<string> {
+  const response = await fetch(imageUrl);
+  const arrayBuffer = await response.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  const mimeType = response.headers.get('content-type') || 'image/png';
+  
+  return uploadImageFromBuffer(buffer, fileName, mimeType);
 }

@@ -4,6 +4,7 @@ import { useStore } from '@/store/useStore';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, Minus, Plus, CreditCard } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { exportDesignToHighRes } from '@/lib/export';
 
 const PRICE_PER_SLEEVE = 0.50;
 
@@ -19,27 +20,53 @@ export default function CheckoutPage() {
   // early return moved after hooks
 
   // Payment processing state and handler
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [status, setStatus] = useState<'idle' | 'exporting' | 'uploading' | 'success' | 'error'>('idle');
+
   const handleProceedToPayment = async () => {
-    setIsProcessing(true);
+    if (sleeves.length === 0) return;
+    setStatus('exporting');
+    
     try {
-      const res = await fetch('/api/checkout', {
+      // 1. Export High-Res Images
+      const designPayloads = await Promise.all(
+        sleeves.map(async (sleeve, index) => {
+          if (!sleeve.canvasData) {
+            throw new Error(`Design ${index + 1} is empty`);
+          }
+          const highResDataUrl = await exportDesignToHighRes(sleeve.canvasData, 4);
+          return {
+            name: sleeve.name || `Design ${index + 1}`,
+            dataUrl: highResDataUrl
+          };
+        })
+      );
+
+      // 2. Upload to Server (Drive & Sheets)
+      setStatus('uploading');
+      const res = await fetch('/api/order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ purchaseId, sleeves }),
+        body: JSON.stringify({
+          purchaseId,
+          designs: designPayloads,
+          remarks: "From Basket Checkout"
+        }),
       });
+
       const data = await res.json();
-      if (data?.paymentUrl) {
-        // Redirect to payment gateway if provided
-        window.location.href = data.paymentUrl;
-      } else {
-        alert('Payment flow not yet configured.');
-      }
-    } catch (e) {
-      console.error('Payment initiation error', e);
-      alert('Unable to start payment.');
-    } finally {
-      setIsProcessing(false);
+      if (!data.success) throw new Error(data.message || 'Failed to log order');
+
+      // 3. Mock Redirect / Success
+      setStatus('success');
+      alert('Order designs uploaded successfully! Moving to payment... (Mock)');
+      
+      // If there was a real payment URL from /api/checkout, we'd go there now
+      // router.push('/success');
+      
+    } catch (e: any) {
+      console.error('Checkout error', e);
+      setStatus('error');
+      alert('Unable to process order: ' + e.message);
     }
   };
   if (!isMounted) return null;
@@ -150,12 +177,16 @@ export default function CheckoutPage() {
             </div>
 
             <button 
-              className="w-full py-4 bg-primary text-black font-bold uppercase tracking-wider rounded flex items-center justify-center gap-2 hover:brightness-110 transition-all"
+              className="w-full py-4 bg-primary text-black font-bold uppercase tracking-wider rounded flex items-center justify-center gap-2 hover:brightness-110 transition-all disabled:opacity-50"
               onClick={handleProceedToPayment}
-              disabled={isProcessing}
+              disabled={status === 'exporting' || status === 'uploading' || sleeves.length === 0}
             >
               <CreditCard size={20} />
-              {isProcessing ? 'Processing...' : 'Proceed to Payment'}
+              {status === 'exporting' && 'Generating High-Res...'}
+              {status === 'uploading' && 'Saving to Drive...'}
+              {status === 'idle' && 'Proceed to Payment'}
+              {status === 'success' && 'Order Placed!'}
+              {status === 'error' && 'Retry Checkout'}
             </button>
             
             <p className="text-center text-xs text-muted-foreground mt-4">
