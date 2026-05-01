@@ -4,9 +4,9 @@ import { useEffect, useRef } from 'react';
 import { useStore } from '@/store/useStore';
 import { CanvasAction } from '@/lib/events';
 import { Canvas, IText, FabricImage, Rect, filters } from 'fabric';
+import { cn } from '@/lib/utils';
 
 const CANVAS_WIDTH = 400;
-const CANVAS_HEIGHT = 560; // 5:7 ratio
 
 export default function CanvasEditor() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -14,10 +14,17 @@ export default function CanvasEditor() {
   const isLoadingRef = useRef(false);
   const { activeSleeveId, updateSleeve, sleeves, setActiveObjectType, setTextProps, setActiveTab } = useStore();
 
+  const activeSleeve = sleeves.find(s => s.id === activeSleeveId);
+  const isJapanese = activeSleeve?.sleeveType === 'Japanese';
+  const currentHeight = isJapanese ? 575 : 560;
+
   const latestSleeveIdRef = useRef(activeSleeveId);
+  const currentHeightRef = useRef(currentHeight);
+
   useEffect(() => {
     latestSleeveIdRef.current = activeSleeveId;
-  }, [activeSleeveId]);
+    currentHeightRef.current = currentHeight;
+  }, [activeSleeveId, currentHeight]);
 
   // 1. Initialize Canvas once
   useEffect(() => {
@@ -25,7 +32,7 @@ export default function CanvasEditor() {
 
     const canvas = new Canvas(canvasRef.current, {
       width: CANVAS_WIDTH,
-      height: CANVAS_HEIGHT,
+      height: currentHeight,
       backgroundColor: '#000000',
     });
 
@@ -79,12 +86,12 @@ export default function CanvasEditor() {
           maxX = CANVAS_WIDTH - objWidth / 2;
         }
 
-        if (objHeight > CANVAS_HEIGHT) {
-          minY = CANVAS_HEIGHT - objHeight / 2;
+        if (objHeight > currentHeight) {
+          minY = currentHeight - objHeight / 2;
           maxY = objHeight / 2;
         } else {
           minY = objHeight / 2;
-          maxY = CANVAS_HEIGHT - objHeight / 2;
+          maxY = currentHeight - objHeight / 2;
         }
 
         obj.set({
@@ -155,17 +162,18 @@ export default function CanvasEditor() {
             const data = f.target?.result as string;
             FabricImage.fromURL(data).then((img) => {
               if (fabricCanvas.current !== cvs) return;
-              const scale = Math.max(CANVAS_WIDTH / img.width, CANVAS_HEIGHT / img.height);
+              const cvsHeight = currentHeightRef.current;
+              const scale = Math.max(CANVAS_WIDTH / img.width, cvsHeight / img.height);
               img.set({
                 scaleX: scale,
                 scaleY: scale,
                 left: CANVAS_WIDTH / 2,
-                top: CANVAS_HEIGHT / 2,
+                top: cvsHeight / 2,
                 originX: 'center',
                 originY: 'center',
-                hasControls: false,
-                lockScalingX: true,
-                lockScalingY: true,
+                hasControls: true,
+                lockScalingX: false,
+                lockScalingY: false,
               });
               cvs.add(img);
               cvs.renderAll();
@@ -176,9 +184,10 @@ export default function CanvasEditor() {
           break;
         }
         case 'ADD_TEXT': {
+          const cvsHeight = currentHeightRef.current;
           const text = new IText('Double click to edit', {
             left: CANVAS_WIDTH / 2,
-            top: CANVAS_HEIGHT / 2,
+            top: cvsHeight / 2,
             fontFamily: 'Inter',
             fontSize: 32,
             fill: '#ffffff',
@@ -193,6 +202,7 @@ export default function CanvasEditor() {
         }
         case 'APPLY_FRAME': {
           const type = action.payload;
+          const cvsHeight = currentHeightRef.current;
           const existing = cvs.getObjects().filter((obj: any) => obj.isFrame);
           existing.forEach(obj => cvs.remove(obj));
 
@@ -213,13 +223,16 @@ export default function CanvasEditor() {
             if (frameSrc) {
               FabricImage.fromURL(frameSrc).then((img) => {
                 if (fabricCanvas.current !== cvs) return;
+                const scaleX = CANVAS_WIDTH / 400; 
+                const scaleY = cvsHeight / 560; 
+                
                 img.set({
                   left: CANVAS_WIDTH / 2,
-                  top: CANVAS_HEIGHT / 2,
+                  top: cvsHeight / 2,
                   originX: 'center',
                   originY: 'center',
-                  scaleX: 1,
-                  scaleY: 1,
+                  scaleX: scaleX,
+                  scaleY: scaleY,
                   selectable: true,
                   evented: true,
                   lockMovementX: true,
@@ -348,11 +361,13 @@ export default function CanvasEditor() {
       window.removeEventListener('keydown', handleKeyDown);
       try {
         // Prevent lingering async callbacks (like loadFromJSON) from crashing after unmount
-        canvas.clearContext = () => canvas;
-        canvas.clear = () => canvas;
-        canvas.renderAll = () => canvas;
-        canvas.requestRenderAll = () => canvas;
-        canvas.dispose();
+        if (canvas) {
+          canvas.clearContext = () => canvas;
+          canvas.clear = () => canvas;
+          canvas.renderAll = () => canvas;
+          canvas.requestRenderAll = () => canvas;
+          canvas.dispose();
+        }
       } catch (e) {
         // Ignore dispose errors on unmount
       }
@@ -360,6 +375,48 @@ export default function CanvasEditor() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 1.5 Sync dimensions when type changes
+  useEffect(() => {
+    if (fabricCanvas.current) {
+      const cvs = fabricCanvas.current;
+      const oldHeight = cvs.height;
+      const newHeight = currentHeight;
+      
+      if (oldHeight !== newHeight) {
+        const scaleFactor = newHeight / oldHeight;
+        
+        cvs.setDimensions({
+          width: CANVAS_WIDTH,
+          height: newHeight
+        });
+
+        // Adjust existing objects to fit new height
+        cvs.getObjects().forEach(obj => {
+          // Force all objects to the new vertical center
+          obj.set('top', newHeight / 2);
+          
+          // For frames: Force absolute scale to match the new height
+          if ((obj as any).isFrame) {
+            obj.set({
+              scaleX: CANVAS_WIDTH / 400,
+              scaleY: newHeight / 560
+            });
+          } 
+          // For images: Scale uniformly to ensure they still cover the height
+          else if (obj.type === 'image') {
+            const currentScale = obj.scaleY || 1;
+            obj.set({
+              scaleX: currentScale * scaleFactor,
+              scaleY: currentScale * scaleFactor
+            });
+          }
+        });
+        
+        cvs.renderAll();
+      }
+    }
+  }, [currentHeight]);
 
   // 2. Sync Canvas when activeSleeveId changes
   useEffect(() => {
@@ -390,11 +447,33 @@ export default function CanvasEditor() {
 
   return (
     <div className="flex flex-col items-center justify-center w-full h-full p-8 overflow-auto bg-[#2b2b2b]">
-      <div className="relative shadow-[0_0_50px_rgba(0,0,0,0.8)] ring-1 ring-white/10 overflow-hidden bg-black flex-shrink-0">
+      {/* Size Toggle */}
+      <div className="mb-6 flex bg-black/40 p-1 rounded-full border border-white/5 shadow-inner">
+        <button 
+          onClick={() => activeSleeveId && updateSleeve(activeSleeveId, { sleeveType: 'Standard' })}
+          className={cn(
+            "px-6 py-2 rounded-full text-xs font-bold transition-all uppercase tracking-wider",
+            !isJapanese ? "bg-primary text-black shadow-lg" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          Standard
+        </button>
+        <button 
+          onClick={() => activeSleeveId && updateSleeve(activeSleeveId, { sleeveType: 'Japanese' })}
+          className={cn(
+            "px-6 py-2 rounded-full text-xs font-bold transition-all uppercase tracking-wider",
+            isJapanese ? "bg-primary text-black shadow-lg" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          Japanese
+        </button>
+      </div>
+
+      <div className="relative shadow-[0_0_50px_rgba(0,0,0,0.8)] ring-1 ring-white/10 overflow-hidden bg-black flex-shrink-0 transition-all duration-300">
         <canvas ref={canvasRef} />
       </div>
       <p className="mt-8 text-[10px] text-muted-foreground uppercase tracking-[0.2em]">
-        Standard Sleeve (5:7 Ratio)
+        {isJapanese ? 'Japanese Sleeve (62x89mm)' : 'Standard Sleeve (5:7 Ratio)'}
       </p>
 
       {/* Hidden preloader to force browser to download fonts before Canvas needs them */}

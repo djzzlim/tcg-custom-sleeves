@@ -20,9 +20,14 @@ if (typeof window !== 'undefined') {
   };
 }
 
-function SleeveModel({ textureUrl }: { textureUrl?: string }) {
+function SleeveModel({ textureUrl, sleeveType }: { textureUrl?: string, sleeveType?: 'Standard' | 'Japanese' }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const [texture, setTexture] = useState<THREE.Texture | null>(null);
+
+  const isJapanese = sleeveType === 'Japanese';
+  // Standard: 5x7
+  // Japanese: 5x7.18 (derived from 62x89mm ratio)
+  const height = isJapanese ? 7.18 : 7;
   
   useEffect(() => {
     if (!textureUrl) {
@@ -48,7 +53,7 @@ function SleeveModel({ textureUrl }: { textureUrl?: string }) {
 
   return (
     <mesh ref={meshRef} castShadow receiveShadow>
-      <boxGeometry args={[5, 7, 0.05]} />
+      <boxGeometry args={[5, height, 0.05]} />
       {/* Front material (The design) */}
       {texture ? (
         <meshStandardMaterial 
@@ -97,9 +102,8 @@ export default function Mockup3D() {
         <spotLight position={[10, 20, 10]} angle={0.3} penumbra={1} intensity={10} castShadow />
         <pointLight position={[-10, -10, -10]} intensity={3} />
         <directionalLight position={[0, 0, 10]} intensity={2} />
-
         <Suspense fallback={null}>
-          <SleeveModel textureUrl={activeSleeve?.previewUrl} />
+          <SleeveModel textureUrl={activeSleeve?.previewUrl} sleeveType={activeSleeve?.sleeveType} />
           <Environment preset="studio" />
           <ContactShadows 
             position={[0, -4, 0]} 

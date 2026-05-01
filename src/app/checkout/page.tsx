@@ -27,13 +27,20 @@ export default function CheckoutPage() {
     setStatus('exporting');
     
     try {
+      // 0. Pre-check for empty designs
+      const emptyDesignIndex = sleeves.findIndex(s => !s.canvasData);
+      if (emptyDesignIndex !== -1) {
+        const designName = sleeves[emptyDesignIndex].name || `Design #${emptyDesignIndex + 1}`;
+        alert(`Your design "${designName}" is empty. Please go back and add some images or text before checking out!`);
+        setStatus('idle');
+        return;
+      }
+
       // 1. Export High-Res Images
       const designPayloads = await Promise.all(
         sleeves.map(async (sleeve, index) => {
-          if (!sleeve.canvasData) {
-            throw new Error(`Design ${index + 1} is empty`);
-          }
-          const highResDataUrl = await exportDesignToHighRes(sleeve.canvasData, 4);
+          const height = sleeve.sleeveType === 'Japanese' ? 575 : 560;
+          const highResDataUrl = await exportDesignToHighRes(sleeve.canvasData!, height, 4);
           return {
             name: sleeve.name || `Design ${index + 1}`,
             dataUrl: highResDataUrl
@@ -121,7 +128,9 @@ export default function CheckoutPage() {
                   <div className="flex flex-col justify-between py-2 flex-1">
                     <div>
                       <h3 className="text-xl font-bold text-primary">{sleeve.name}</h3>
-                      <p className="text-sm text-muted-foreground mt-1">Standard 5:7 Size • Matte Finish</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {sleeve.sleeveType === 'Japanese' ? 'Japanese Size (62x89mm)' : 'Standard Size (5:7 Ratio)'} • Matte Finish
+                      </p>
                     </div>
                     
                     <div className="flex items-center justify-between">

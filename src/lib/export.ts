@@ -4,17 +4,16 @@ import { Canvas, FabricImage, IText, Rect, filters } from 'fabric';
  * Utility to render a Fabric.js JSON state to a high-resolution DataURL.
  * This runs in the browser.
  */
-export async function exportDesignToHighRes(json: string, multiplier: number = 4): Promise<string> {
+export async function exportDesignToHighRes(json: string, height: number = 560, multiplier: number = 4): Promise<string> {
   // Create a temporary canvas element
   const tempElement = document.createElement('canvas');
   
   // Fabric.js needs the width/height to match the original design's base size
   const CANVAS_WIDTH = 400;
-  const CANVAS_HEIGHT = 560;
 
   const canvas = new Canvas(tempElement, {
     width: CANVAS_WIDTH,
-    height: CANVAS_HEIGHT,
+    height: height,
   });
 
   try {
