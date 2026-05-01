@@ -393,24 +393,37 @@ export default function CanvasEditor() {
 
         // Adjust existing objects to fit new height
         cvs.getObjects().forEach(obj => {
-          // Force all objects to the new vertical center
-          obj.set('top', newHeight / 2);
+          // 1. Maintain relative position (multiplier) instead of forcing center
+          if (obj.top !== undefined) {
+            obj.set('top', obj.top * scaleFactor);
+          }
           
-          // For frames: Force absolute scale to match the new height
+          // 2. For frames: Force absolute scale to match the new height
           if ((obj as any).isFrame) {
             obj.set({
               scaleX: CANVAS_WIDTH / 400,
               scaleY: newHeight / 560
             });
           } 
-          // For images: Scale uniformly to ensure they still cover the height
+          // 3. For images: Scale uniformly to maintain aspect ratio
           else if (obj.type === 'image') {
-            const currentScale = obj.scaleY || 1;
+            const currentScaleX = obj.scaleX || 1;
+            const currentScaleY = obj.scaleY || 1;
             obj.set({
-              scaleX: currentScale * scaleFactor,
-              scaleY: currentScale * scaleFactor
+              scaleX: currentScaleX * scaleFactor,
+              scaleY: currentScaleY * scaleFactor
             });
           }
+          // 4. For text: Scale font size instead of object scale to keep it editable
+          else if (obj.type === 'i-text') {
+            const currentFontSize = (obj as IText).fontSize || 32;
+            (obj as IText).set({
+              fontSize: currentFontSize * scaleFactor
+            });
+          }
+          
+          // Update selection coordinates after moving/scaling
+          obj.setCoords();
         });
         
         cvs.renderAll();

@@ -41,9 +41,6 @@ export default function EditorSubPanel() {
               }
             }}
           />
-          <p className="text-center text-xs text-muted-foreground mt-2">
-            Tip: You can upload multiple images at once!
-          </p>
         </div>
       )}
 
@@ -74,6 +71,7 @@ export default function EditorSubPanel() {
               <p className="text-sm text-foreground">Choose a frame style:</p>
               <div className="grid grid-cols-2 gap-[2px] bg-border p-[2px] border border-border">
                 {[
+                  { id: 'none', label: 'Sleeveless', src: null },
                   { id: 'standard', src: '/frames/01.svg?v=8' },
                   { id: 'fade', src: '/frames/02.svg?v=8' },
                   { id: 'torn1', src: '/frames/03.svg?v=8' },
@@ -90,10 +88,22 @@ export default function EditorSubPanel() {
                     onClick={() => dispatchCanvasAction({ type: 'APPLY_FRAME', payload: frame.id })}
                     className="aspect-[4/5] bg-[#f2ce1b] hover:brightness-110 relative overflow-hidden flex items-center justify-center transition-all group border-2 border-transparent hover:border-primary"
                   >
-                    <div className="w-[85%] h-[85%] bg-[#a8a497] rotate-[-5deg] relative transition-transform group-hover:rotate-0 flex items-center justify-center">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={frame.src} alt={frame.id} className="absolute inset-0 w-full h-full object-fill pointer-events-none" />
+                    <div className="w-[85%] h-[85%] bg-[#a8a497] rotate-[-5deg] relative transition-transform group-hover:rotate-0 flex items-center justify-center overflow-hidden">
+                      {frame.src ? (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img src={frame.src} alt={frame.id} className="absolute inset-0 w-full h-full object-fill pointer-events-none" />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center text-center p-2">
+                          <span className="text-[10px] font-bold text-black/40 uppercase tracking-tighter leading-none">No</span>
+                          <span className="text-[10px] font-bold text-black/40 uppercase tracking-tighter leading-none">Frame</span>
+                        </div>
+                      )}
                     </div>
+                    {frame.label && (
+                       <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-[8px] text-white py-0.5 text-center font-bold uppercase">
+                         {frame.label}
+                       </div>
+                    )}
                   </button>
                 ))}
               </div>
