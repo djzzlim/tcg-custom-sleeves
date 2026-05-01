@@ -2,9 +2,10 @@
 
 import { useStore } from '@/store/useStore';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, Minus, Plus, CreditCard } from 'lucide-react';
+import { ChevronLeft, Minus, Plus, CreditCard, Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { exportDesignToHighRes } from '@/lib/export';
+import { cn } from '@/lib/utils';
 
 const PRICE_PER_SLEEVE = 1.00;
 
@@ -153,7 +154,20 @@ export default function CheckoutPage() {
                         >
                           <Minus size={16} />
                         </button>
-                        <span className="font-mono font-semibold w-8 text-center">{qty}</span>
+                        <input 
+                          type="number"
+                          min="10"
+                          value={qty}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value);
+                            updateSleeve(sleeve.id, { quantity: isNaN(val) ? 10 : Math.max(1, val) });
+                          }}
+                          onBlur={(e) => {
+                            const val = parseInt(e.target.value);
+                            updateSleeve(sleeve.id, { quantity: isNaN(val) || val < 10 ? 10 : val });
+                          }}
+                          className="w-12 bg-transparent text-center font-mono font-semibold focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
                         <button 
                           onClick={() => updateSleeve(sleeve.id, { quantity: qty + 1 })}
                           className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-muted transition-colors text-muted-foreground"
@@ -226,10 +240,16 @@ export default function CheckoutPage() {
               onClick={handleProceedToPayment}
               disabled={status === 'exporting' || status === 'uploading' || sleeves.length === 0}
             >
-              <CreditCard size={20} />
-              {(status === 'exporting' || status === 'uploading') ? 'Processing Order... Please don\'t refresh page' : 
-               status === 'idle' ? 'Proceed to Payment' : 
-               status === 'success' ? 'Order Placed!' : 'Retry Checkout'}
+              {(status === 'exporting' || status === 'uploading') ? (
+                <Loader2 size={20} className="animate-spin" />
+              ) : (
+                <CreditCard size={20} />
+              )}
+              
+              {(status === 'exporting' || status === 'uploading') ? 'Please wait...' :
+               status === 'success' ? 'Order Placed!' : 
+               status === 'error' ? 'Retry Checkout' : 
+               'Proceed to Payment'}
             </button>
             
             <p className="text-center text-xs text-muted-foreground mt-4">
