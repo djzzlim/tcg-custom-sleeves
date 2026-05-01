@@ -460,7 +460,7 @@ export default function CanvasEditor() {
   ];
 
   return (
-    <div className="flex flex-col items-center justify-center w-full h-full p-8 overflow-auto bg-[#2b2b2b]">
+    <div className="flex flex-col items-center justify-start w-full h-full pt-12 p-8 overflow-auto bg-[#2b2b2b]">
       {/* Size Toggle */}
       <div className="mb-6 flex bg-black/40 p-1 rounded-full border border-white/5 shadow-inner">
         <button
