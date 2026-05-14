@@ -3,6 +3,7 @@
 import { Canvas, useLoader, useFrame } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera, Environment, ContactShadows } from '@react-three/drei';
 import { useStore } from '@/store/useStore';
+import { sleeveCopyPreviewUrl } from '@/lib/packOrder';
 import * as THREE from 'three';
 import { Suspense, useState, useEffect, useRef } from 'react';
 
@@ -83,8 +84,13 @@ function SleeveModel({ textureUrl, sleeveType }: { textureUrl?: string, sleeveTy
 }
 
 export default function Mockup3D() {
-  const { activeSleeveId, sleeves } = useStore();
+  const { activeSleeveId, activeSleeveCopyId, sleeves, packs } = useStore();
   const activeSleeve = sleeves.find(s => s.id === activeSleeveId);
+  const activeCopy = activeSleeve?.sleeveCopies?.find((copy) => copy.id === activeSleeveCopyId);
+  const previewUrl = activeSleeve ? sleeveCopyPreviewUrl(activeSleeve, activeCopy) : undefined;
+  const activePack = activeSleeve
+    ? packs.find((p) => p.id === activeSleeve.packId)
+    : undefined;
 
   return (
     <div className="w-full h-full">
@@ -103,7 +109,7 @@ export default function Mockup3D() {
         <pointLight position={[-10, -10, -10]} intensity={3} />
         <directionalLight position={[0, 0, 10]} intensity={2} />
         <Suspense fallback={null}>
-          <SleeveModel textureUrl={activeSleeve?.previewUrl} sleeveType={activeSleeve?.sleeveType} />
+          <SleeveModel textureUrl={previewUrl} sleeveType={activePack?.sleeveType} />
           <Environment preset="studio" />
           <ContactShadows 
             position={[0, -4, 0]} 
@@ -115,7 +121,7 @@ export default function Mockup3D() {
         </Suspense>
       </Canvas>
       
-      {!activeSleeve?.previewUrl && (
+      {!previewUrl && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <p className="text-[10px] text-muted-foreground uppercase tracking-widest">
             Waiting for design...
