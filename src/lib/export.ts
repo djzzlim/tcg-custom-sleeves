@@ -1,40 +1,91 @@
-import { Canvas, FabricImage, IText, Rect, filters } from 'fabric';
+import { Canvas, FabricImage } from 'fabric';
+import {
+  buildImageFilters,
+  DEFAULT_IMAGE_ADJUSTMENTS,
+  mergeImageAdjustments,
+  type ImageAdjustments,
+} from '@/lib/imageAdjustments';
+
+export type ExportFormat = 'png' | 'jpeg';
+
+export type ExportOptions = {
+  /** Final canvas height before applying the multiplier (Standard 560, Japanese 575). */
+  height?: number;
+  /** Output multiplier — 4 gives a print-friendly resolution. */
+  multiplier?: number;
+  /**
+   * Output format. Default is `png` for lossless output, as required by the
+   * production print pipeline. Use `jpeg` only when a smaller file is needed.
+   */
+  format?: ExportFormat;
+  /** Only consulted for JPEG. PNG ignores quality (always lossless). */
+  jpegQuality?: number;
+};
 
 /**
- * Utility to render a Fabric.js JSON state to a high-resolution DataURL.
- * This runs in the browser.
+ * Render a Fabric.js JSON state to a high-resolution DataURL.
+ *
+ * PNG output is lossless by spec (PNG uses Deflate, not lossy compression),
+ * so it's the default for the print pipeline. JPEG is available as an opt-in.
+ *
+ * Runs in the browser.
  */
-export async function exportDesignToHighRes(json: string, height: number = 560, multiplier: number = 4): Promise<string> {
-  // Create a temporary canvas element
+export async function exportDesignToHighRes(
+  json: string,
+  heightOrOptions: number | ExportOptions = 560,
+  multiplierLegacy: number = 4
+): Promise<string> {
+  const opts: Required<ExportOptions> =
+    typeof heightOrOptions === 'number'
+      ? {
+          height: heightOrOptions,
+          multiplier: multiplierLegacy,
+          format: 'png',
+          jpegQuality: 1.0,
+        }
+      : {
+          height: heightOrOptions.height ?? 560,
+          multiplier: heightOrOptions.multiplier ?? 4,
+          format: heightOrOptions.format ?? 'png',
+          jpegQuality: heightOrOptions.jpegQuality ?? 1.0,
+        };
+
   const tempElement = document.createElement('canvas');
-  
-  // Fabric.js needs the width/height to match the original design's base size
   const CANVAS_WIDTH = 400;
 
   const canvas = new Canvas(tempElement, {
     width: CANVAS_WIDTH,
-    height: height,
+    height: opts.height,
   });
 
   try {
-    // Load the JSON data
-    // Note: We need to pass the same custom properties we used during saving (isFrame, customColor)
     await canvas.loadFromJSON(JSON.parse(json));
-    
-    // Ensure all images/filters are rendered
+
+    canvas.getObjects().forEach((obj) => {
+      if (String((obj as { type?: string }).type || '').toLowerCase() !== 'image') return;
+      if ((obj as { isFrame?: boolean }).isFrame) return;
+      const img = obj as FabricImage & { imageAdjustments?: Partial<ImageAdjustments> };
+      const adj = mergeImageAdjustments(DEFAULT_IMAGE_ADJUSTMENTS, img.imageAdjustments ?? {});
+      img.imageAdjustments = adj;
+      img.filters = buildImageFilters(adj);
+      try {
+        img.applyFilters();
+      } catch {
+        /* noop */
+      }
+    });
+
     canvas.renderAll();
 
-    // Export with multiplier for high resolution
     const dataUrl = canvas.toDataURL({
-      format: 'jpeg',
-      quality: 0.85,
-      multiplier: multiplier,
+      format: opts.format,
+      quality: opts.format === 'jpeg' ? opts.jpegQuality : 1,
+      multiplier: opts.multiplier,
       enableRetinaScaling: true,
     });
 
     return dataUrl;
   } finally {
-    // Clean up to prevent memory leaks
     canvas.dispose();
     tempElement.remove();
   }
