@@ -25,7 +25,11 @@ import {
   TEXT_STROKE_DEFAULT,
 } from '@/lib/colorPresets';
 import { useRef, useState } from 'react';
-import { shouldBlockNextImageUpload, totalOrderSleeves } from '@/lib/packOrder';
+import {
+  designHasUserPhoto,
+  shouldBlockNextImageUpload,
+  totalOrderSleeves,
+} from '@/lib/packOrder';
 import {
   INPUT_ACCEPT,
   MAX_INPUT_BYTES,
@@ -40,10 +44,18 @@ export default function EditorSubPanel() {
     textProps,
     photoAdjustments,
     packs,
+    sleeves,
+    activeSleeveId,
     sessionImageUploadCount,
     setActiveTab,
   } = useStore();
   const totalCap = totalOrderSleeves(packs);
+  const hasPack = packs.length > 0;
+  const activeDesign = sleeves.find((s) => s.id === activeSleeveId);
+  const replacingPhoto = designHasUserPhoto(activeDesign);
+  const showPhotoAdjustments = replacingPhoto;
+  const canUploadImage =
+    hasPack && (replacingPhoto || !shouldBlockNextImageUpload(packs, sessionImageUploadCount));
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
@@ -84,8 +96,24 @@ export default function EditorSubPanel() {
             </div>
             <button
               type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="group relative w-full overflow-hidden rounded-2xl border-2 border-dashed border-primary/35 bg-gradient-to-b from-primary/[0.08] via-transparent to-black/20 px-4 py-7 transition-all hover:border-primary/55 hover:from-primary/[0.12] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+              disabled={!canUploadImage}
+              title={
+                !hasPack
+                  ? 'Create a pack on the right (Start designing), then you can upload.'
+                  : !canUploadImage
+                    ? 'You have reached the upload limit for this order.'
+                    : 'Upload a JPG or PNG'
+              }
+              onClick={() => {
+                if (!canUploadImage) return;
+                fileInputRef.current?.click();
+              }}
+              className={cn(
+                'group relative w-full overflow-hidden rounded-2xl border-2 border-dashed px-4 py-7 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50',
+                canUploadImage
+                  ? 'border-primary/35 bg-gradient-to-b from-primary/[0.08] via-transparent to-black/20 hover:border-primary/55 hover:from-primary/[0.12]'
+                  : 'cursor-not-allowed border-border/60 bg-black/20 opacity-60'
+              )}
             >
               <div className="flex flex-col items-center gap-3">
                 <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/12 text-primary shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] ring-1 ring-primary/20 transition group-hover:bg-primary/20 group-hover:ring-primary/35">
@@ -93,20 +121,31 @@ export default function EditorSubPanel() {
                 </span>
                 <div className="text-center">
                   <span className="block text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
-                    Upload images
+                    {replacingPhoto ? 'Replace photo' : 'Upload images'}
                   </span>
                   <span className="mt-1 block text-[11px] leading-snug text-muted-foreground">
-                    JPG or PNG · fills the sleeve; drag on canvas to reposition
+                    {replacingPhoto
+                      ? 'Pick a new file to replace the current photo on this design'
+                      : 'JPG or PNG · fills the sleeve; drag on canvas to reposition'}
                   </span>
                   <span className="mt-2 block text-[10px] text-muted-foreground">
                     PNG or JPG · up to {formatBytes(MAX_INPUT_BYTES)}
                   </span>
                   <span className="mt-1 block text-[10px] text-muted-foreground">
-                    Image uploads this session:{' '}
-                    <span className="font-mono text-foreground">
-                      {sessionImageUploadCount}
-                    </span>{' '}
-                    / {totalCap} (one per sleeve across all your packs)
+                    {hasPack ? (
+                      <>
+                        Image uploads this session:{' '}
+                        <span className="font-mono text-foreground">
+                          {sessionImageUploadCount}
+                        </span>{' '}
+                        / {totalCap} (one per sleeve across all your packs)
+                      </>
+                    ) : (
+                      <>
+                        Add a pack first — pick a size on the right, then{' '}
+                        <span className="text-foreground">Start designing</span>, before uploading.
+                      </>
+                    )}
                   </span>
                 </div>
               </div>
@@ -123,14 +162,25 @@ export default function EditorSubPanel() {
               type="file"
               ref={fileInputRef}
               className="hidden"
+              disabled={!canUploadImage}
               accept={INPUT_ACCEPT}
               onChange={async (e) => {
                 const file = e.target.files?.[0];
                 if (!file) return;
                 setUploadError(null);
-                const { packs: ps, sessionImageUploadCount: uploads } = useStore.getState();
+                const { packs: ps, sleeves: ss, activeSleeveId: aid, sessionImageUploadCount: uploads } =
+                  useStore.getState();
                 const cap = totalOrderSleeves(ps);
-                if (shouldBlockNextImageUpload(ps, uploads)) {
+                const design = ss.find((s) => s.id === aid);
+                const isReplace = designHasUserPhoto(design);
+                if (ps.length === 0) {
+                  setUploadError(
+                    'Create a pack first: choose 65 or 110 sleeves on the right, then tap Start designing.'
+                  );
+                  e.target.value = '';
+                  return;
+                }
+                if (!isReplace && shouldBlockNextImageUpload(ps, uploads)) {
                   setUploadError(
                     `You can upload at most ${cap} images in this session (one per sleeve across all your packs).`
                   );
@@ -149,6 +199,7 @@ export default function EditorSubPanel() {
             />
           </section>
 
+          {showPhotoAdjustments && (
           <section className="rounded-2xl border border-white/[0.06] bg-black/25 p-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]">
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
@@ -252,6 +303,7 @@ export default function EditorSubPanel() {
               Reset all adjustments
             </button>
           </section>
+          )}
         </div>
       )}
 

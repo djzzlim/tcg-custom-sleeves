@@ -20,6 +20,11 @@ export type ExportOptions = {
   format?: ExportFormat;
   /** Only consulted for JPEG. PNG ignores quality (always lossless). */
   jpegQuality?: number;
+  /**
+   * When set, every user photo on the canvas uses these adjustments (design-level),
+   * so exports stay consistent even if per-sleeve JSON was saved with older values.
+   */
+  imageAdjustments?: ImageAdjustments;
 };
 
 /**
@@ -35,7 +40,13 @@ export async function exportDesignToHighRes(
   heightOrOptions: number | ExportOptions = 560,
   multiplierLegacy: number = 4
 ): Promise<string> {
-  const opts: Required<ExportOptions> =
+  const opts: {
+    height: number;
+    multiplier: number;
+    format: ExportFormat;
+    jpegQuality: number;
+    imageAdjustments?: ImageAdjustments;
+  } =
     typeof heightOrOptions === 'number'
       ? {
           height: heightOrOptions,
@@ -48,6 +59,9 @@ export async function exportDesignToHighRes(
           multiplier: heightOrOptions.multiplier ?? 4,
           format: heightOrOptions.format ?? 'png',
           jpegQuality: heightOrOptions.jpegQuality ?? 1.0,
+          ...(heightOrOptions.imageAdjustments !== undefined
+            ? { imageAdjustments: heightOrOptions.imageAdjustments }
+            : {}),
         };
 
   const tempElement = document.createElement('canvas');
@@ -61,19 +75,40 @@ export async function exportDesignToHighRes(
   try {
     await canvas.loadFromJSON(JSON.parse(json));
 
-    canvas.getObjects().forEach((obj) => {
-      if (String((obj as { type?: string }).type || '').toLowerCase() !== 'image') return;
-      if ((obj as { isFrame?: boolean }).isFrame) return;
-      const img = obj as FabricImage & { imageAdjustments?: Partial<ImageAdjustments> };
-      const adj = mergeImageAdjustments(DEFAULT_IMAGE_ADJUSTMENTS, img.imageAdjustments ?? {});
-      img.imageAdjustments = adj;
-      img.filters = buildImageFilters(adj);
-      try {
-        img.applyFilters();
-      } catch {
-        /* noop */
-      }
-    });
+    const applyAdjustments = (adj: ImageAdjustments) => {
+      canvas.getObjects().forEach((obj) => {
+        if (String((obj as { type?: string }).type || '').toLowerCase() !== 'image') return;
+        if ((obj as { isFrame?: boolean }).isFrame) return;
+        const img = obj as FabricImage & { imageAdjustments?: ImageAdjustments };
+        img.imageAdjustments = adj;
+        img.filters = buildImageFilters(adj);
+        try {
+          img.applyFilters();
+        } catch {
+          /* noop */
+        }
+      });
+    };
+
+    if (opts.imageAdjustments !== undefined) {
+      applyAdjustments(
+        mergeImageAdjustments(DEFAULT_IMAGE_ADJUSTMENTS, opts.imageAdjustments)
+      );
+    } else {
+      canvas.getObjects().forEach((obj) => {
+        if (String((obj as { type?: string }).type || '').toLowerCase() !== 'image') return;
+        if ((obj as { isFrame?: boolean }).isFrame) return;
+        const img = obj as FabricImage & { imageAdjustments?: Partial<ImageAdjustments> };
+        const adj = mergeImageAdjustments(DEFAULT_IMAGE_ADJUSTMENTS, img.imageAdjustments ?? {});
+        img.imageAdjustments = adj;
+        img.filters = buildImageFilters(adj);
+        try {
+          img.applyFilters();
+        } catch {
+          /* noop */
+        }
+      });
+    }
 
     canvas.renderAll();
 

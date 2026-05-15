@@ -32,6 +32,8 @@ export interface SleeveDesign {
   /** Sleeves inside the parent pack that use this design. Sums per pack must equal pack.size. */
   quantity?: number;
   sleeveCopies?: SleeveCopy[];
+  /** Shared photo filters for every sleeve in this design (not per-copy). */
+  imageAdjustments?: ImageAdjustments;
 }
 
 function createSleeveCopies(quantity: number, seed?: SleeveCopy[]): SleeveCopy[] {
@@ -79,11 +81,11 @@ interface AppState {
 
   // Actions
   incrementSessionImageUpload: () => void;
-  /** Create a new pack with chosen size + cut and seed it with one full-size design. */
+  /** Create a new pack with chosen size + cut and seed it with one design at quantity 1. */
   createPack: (opts: { size: OrderPackSize; sleeveType: 'Standard' | 'Japanese' }) => void;
   removePack: (packId: string) => void;
   updatePack: (packId: string, data: Partial<Omit<Pack, 'id'>>) => void;
-  /** Add another design inside the given pack using its remaining unassigned sleeves. */
+  /** Add another design in the pack, starting at quantity 1 (client raises with +). */
   addDesignToPack: (packId: string) => void;
   /** Update how many sleeves of a design's pack use this design. Clamped to 1..(packSize - others). */
   setDesignQuantity: (designId: string, quantity: number) => void;
@@ -91,7 +93,8 @@ interface AppState {
   updateSleeveCopy: (designId: string, copyId: string, data: Partial<SleeveCopy>) => void;
   /** Remove a design. If it was the last in its pack, the pack is also removed. */
   removeSleeve: (id: string) => void;
-  setActiveSleeve: (id: string, copyId?: string) => void;
+  /** Focus a design in the editor. Omit `copyId` to edit shared artwork for all sleeves of that design. */
+  setActiveSleeve: (id: string, copyId?: string | null) => void;
   setRemarks: (remarks: string) => void;
   generatePurchaseId: () => void;
   setActiveTab: (tab: EditorTab) => void;
@@ -141,7 +144,7 @@ export const useStore = create<AppState>((set) => ({
       const packId = crypto.randomUUID();
       const designId = crypto.randomUUID();
       const packIndex = state.packs.length + 1;
-      const sleeveCopies = createSleeveCopies(size);
+      const sleeveCopies = createSleeveCopies(1);
       return {
         packs: [
           ...state.packs,
@@ -158,12 +161,12 @@ export const useStore = create<AppState>((set) => ({
             id: designId,
             packId,
             name: 'Design #1',
-            quantity: size,
+            quantity: 1,
             sleeveCopies,
           },
         ],
         activeSleeveId: designId,
-        activeSleeveCopyId: sleeveCopies[0]?.id ?? null,
+        activeSleeveCopyId: null,
       };
     }),
 
@@ -177,15 +180,12 @@ export const useStore = create<AppState>((set) => ({
       if (nextActiveId && !newSleeves.some((s) => s.id === nextActiveId)) {
         nextActiveId = newSleeves[0]?.id ?? null;
       }
-      const nextActiveDesign = newSleeves.find((s) => s.id === nextActiveId);
       return {
         packs: newPacks,
         sleeves: newSleeves,
         activeSleeveId: nextActiveId,
         activeSleeveCopyId:
-          nextActiveId === state.activeSleeveId
-            ? state.activeSleeveCopyId
-            : nextActiveDesign?.sleeveCopies?.[0]?.id ?? null,
+          nextActiveId === state.activeSleeveId ? state.activeSleeveCopyId : null,
       };
     }),
 
@@ -200,10 +200,10 @@ export const useStore = create<AppState>((set) => ({
       if (!pack) return state;
       const packDesigns = designsInPack(state.sleeves, packId);
       const remaining = pack.size - totalSleevesAssigned(packDesigns);
-      if (remaining <= 0) return state;
+      if (remaining < 1) return state;
       const id = crypto.randomUUID();
       const nextIndex = packDesigns.length + 1;
-      const sleeveCopies = createSleeveCopies(remaining);
+      const sleeveCopies = createSleeveCopies(1);
       return {
         sleeves: [
           ...state.sleeves,
@@ -211,12 +211,12 @@ export const useStore = create<AppState>((set) => ({
             id,
             packId,
             name: `Design #${nextIndex}`,
-            quantity: remaining,
+            quantity: 1,
             sleeveCopies,
           },
         ],
         activeSleeveId: id,
-        activeSleeveCopyId: sleeveCopies[0]?.id ?? null,
+        activeSleeveCopyId: null,
       };
     }),
 
@@ -238,7 +238,7 @@ export const useStore = create<AppState>((set) => ({
         sleeves: state.sleeves.map((s) =>
           s.id === designId ? { ...s, quantity: clamped, sleeveCopies: resized } : s
         ),
-        activeSleeveCopyId: activeCopyStillExists ? state.activeSleeveCopyId : resized[0]?.id ?? null,
+        activeSleeveCopyId: activeCopyStillExists ? state.activeSleeveCopyId : null,
       };
     }),
 
@@ -288,24 +288,21 @@ export const useStore = create<AppState>((set) => ({
       } else if (nextActiveId && !newSleeves.some((s) => s.id === nextActiveId)) {
         nextActiveId = newSleeves[0]?.id ?? null;
       }
-      const nextActiveDesign = newSleeves.find((s) => s.id === nextActiveId);
 
       return {
         packs: newPacks,
         sleeves: newSleeves,
         activeSleeveId: nextActiveId,
         activeSleeveCopyId:
-          nextActiveId === state.activeSleeveId
-            ? state.activeSleeveCopyId
-            : nextActiveDesign?.sleeveCopies?.[0]?.id ?? null,
+          nextActiveId === state.activeSleeveId ? state.activeSleeveCopyId : null,
       };
     }),
 
-  setActiveSleeve: (id, copyId) =>
+  setActiveSleeve: (id, copyId?) =>
     set((state) => {
       const design = state.sleeves.find((s) => s.id === id);
       const copies = design ? resizeSleeveCopies(design, design.quantity ?? 0) : [];
-      const nextCopyId = copyId ?? copies[0]?.id ?? null;
+      const nextCopyId = copyId !== undefined ? copyId : null;
       return {
         sleeves: design && copies.length !== (design.sleeveCopies?.length ?? 0)
           ? state.sleeves.map((s) => (s.id === id ? { ...s, sleeveCopies: copies } : s))

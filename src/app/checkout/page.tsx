@@ -18,6 +18,7 @@ import {
   dataUrlToBlob,
   MAX_OUTPUT_BYTES,
 } from '@/lib/chunkedUpload';
+import { appAlert } from '@/lib/appDialog';
 
 const PRICE_PER_SLEEVE = 1.0;
 
@@ -41,14 +42,20 @@ export default function CheckoutPage() {
 
     try {
       if (!customerName.trim() || !customerEmail.trim()) {
-        alert('Please provide your name and email address before proceeding.');
+        await appAlert({
+          title: 'Missing details',
+          message: 'Please provide your name and email address before proceeding.',
+        });
         setStatus('idle');
         return;
       }
 
       const packCheck = orderMeetsPackRequirements(packs, sleeves);
       if (!packCheck.ok) {
-        alert(packCheck.message);
+        await appAlert({
+          title: 'Order not ready',
+          message: packCheck.message,
+        });
         setStatus('idle');
         return;
       }
@@ -92,6 +99,9 @@ export default function CheckoutPage() {
               height,
               multiplier: 4,
               format: 'png',
+              ...(design.imageAdjustments !== undefined
+                ? { imageAdjustments: design.imageAdjustments }
+                : {}),
             });
             const blob = dataUrlToBlob(highResDataUrl);
             if (blob.size > MAX_OUTPUT_BYTES) {
@@ -148,13 +158,20 @@ export default function CheckoutPage() {
 
       setStatus('success');
       setUploadInfo(null);
-      alert('Order designs uploaded successfully! Moving to payment... (Mock)');
+      await appAlert({
+        title: 'Order uploaded',
+        message: 'Your designs were uploaded successfully. Moving to payment… (Mock)',
+      });
     } catch (e: unknown) {
       console.error('Checkout error', e);
       const message = e instanceof Error ? e.message : 'Unknown checkout error';
       setStatus('error');
       setUploadInfo(null);
-      alert('Unable to process order: ' + message);
+      await appAlert({
+        title: 'Checkout failed',
+        message: `Unable to process order: ${message}`,
+        variant: 'destructive',
+      });
     }
   };
 
