@@ -2,18 +2,15 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useStore, type Pack, type SleeveDesign } from '@/store/useStore';
-import { Trash2, Edit2, Plus, Minus, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Trash2, Edit2, Plus, Minus, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { appConfirm } from '@/lib/appDialog';
 import {
   ORDER_PACK_SIZES,
   type OrderPackSize,
   DEFAULT_ORDER_PACK_SIZE,
-  canvasHasUserPhoto,
   isPackDesignComplete,
   designsInPack,
-  sleeveCopiesForDesign,
-  sleeveCopyCanvasData,
-  sleeveCopyPreviewUrl,
   totalSleevesAssigned,
   remainingSleevesForPack,
   maxQuantityForDesignInPack,
@@ -26,7 +23,6 @@ export default function MultiSleeveList() {
     packs,
     sleeves,
     activeSleeveId,
-    activeSleeveCopyId,
     createPack,
     removePack,
     addDesignToPack,
@@ -90,44 +86,51 @@ export default function MultiSleeveList() {
     setSetupCut('Standard');
   };
 
-  const onRemovePack = (pack: Pack) => {
+  const onRemovePack = async (pack: Pack) => {
     const packDesigns = designsInPack(sleeves, pack.id);
     const designCount = packDesigns.length;
-    const ok = window.confirm(
-      `Remove "${pack.name}" and its ${designCount} design${designCount === 1 ? '' : 's'}? This cannot be undone.`
-    );
+    const ok = await appConfirm({
+      title: 'Remove pack?',
+      message: `Remove "${pack.name}" and its ${designCount} design${designCount === 1 ? '' : 's'}? This cannot be undone.`,
+      variant: 'destructive',
+      confirmLabel: 'Remove pack',
+    });
     if (!ok) return;
     removePack(pack.id);
   };
 
-  const onRemoveDesign = (pack: Pack, design: SleeveDesign) => {
+  const onRemoveDesign = async (pack: Pack, design: SleeveDesign) => {
     const packDesigns = designsInPack(sleeves, pack.id);
     const isLast = packDesigns.length === 1;
     const message = isLast
-      ? `"${design.name}" is the only design in "${pack.name}". Removing it will also remove the pack. Continue?`
+      ? `"${design.name}" is the only design in "${pack.name}". Removing it will also remove the pack.`
       : `Remove "${design.name}"? Its ${design.quantity ?? 0} sleeve${(design.quantity ?? 0) === 1 ? '' : 's'} in "${pack.name}" will be unassigned.`;
-    if (!window.confirm(message)) return;
+    const ok = await appConfirm({
+      title: isLast ? 'Remove pack?' : 'Remove design?',
+      message,
+      variant: 'destructive',
+      confirmLabel: isLast ? 'Remove pack' : 'Remove',
+    });
+    if (!ok) return;
     removeSleeve(design.id);
   };
 
-  // Flat preview tiles across all packs, grouped by pack then by design order
-  const previewTiles = packs.flatMap((pack) => {
+  // One preview tile per design (not per sleeve quantity)
+  const previewDesignTiles = packs.flatMap((pack) => {
     const designs = designsInPack(sleeves, pack.id);
-    return designs.flatMap((d) => {
-      const copies = sleeveCopiesForDesign(d);
-      return copies.map((copy, i) => ({
-        key: `${d.id}-${i}`,
-        packName: pack.name,
-        designName: d.name,
-        previewUrl: sleeveCopyPreviewUrl(d, copy),
-        copyId: copy.id,
-        designId: d.id,
-        sleeveIndex: i,
-        designTotal: copies.length,
-      }));
-    });
+    return designs.map((d) => ({
+      key: d.id,
+      packName: pack.name,
+      designName: d.name,
+      previewUrl: d.previewUrl,
+      designId: d.id,
+      quantity: d.quantity ?? 0,
+    }));
   });
-  const totalAssignedAcrossOrder = previewTiles.length;
+  const totalAssignedAcrossOrder = packs.reduce(
+    (sum, pack) => sum + totalSleevesAssigned(designsInPack(sleeves, pack.id)),
+    0
+  );
   const totalCapacityAcrossOrder = packs.reduce((s, p) => s + p.size, 0);
 
   return (
@@ -198,7 +201,6 @@ export default function MultiSleeveList() {
                   {packDesigns.map((design) => {
                     const isActive = design.id === activeSleeveId;
                     const qty = design.quantity ?? 0;
-                    const copies = sleeveCopiesForDesign(design);
                     const max = maxQuantityForDesignInPack(
                       packDesigns,
                       design.id,
@@ -207,12 +209,6 @@ export default function MultiSleeveList() {
                     const canInc = qty < max;
                     const canDec = qty > 1;
                     const complete = isPackDesignComplete(design);
-                    const activeCopyIndex = copies.findIndex((copy) => copy.id === activeSleeveCopyId);
-                    const selectedCopyIndex = isActive && activeCopyIndex >= 0 ? activeCopyIndex : 0;
-                    const selectedCopy = copies[selectedCopyIndex];
-                    const readyCopies = copies.filter((copy) =>
-                      canvasHasUserPhoto(sleeveCopyCanvasData(design, copy))
-                    ).length;
                     return (
                       <div
                         key={design.id}
@@ -295,9 +291,6 @@ export default function MultiSleeveList() {
                             </div>
                             <p className="mt-0.5 text-[10px] text-muted-foreground">
                               {complete ? 'Photo ready' : 'Upload a photo for this design'}
-                              {isActive && activeCopyIndex >= 0
-                                ? ` · editing sleeve ${activeCopyIndex + 1}/${qty}`
-                                : ''}
                             </p>
                             <div
                               className="mt-1.5 flex items-center gap-1.5"
@@ -352,59 +345,6 @@ export default function MultiSleeveList() {
                                 / {pack.size}
                               </span>
                             </div>
-                            {qty > 1 && (
-                              <div
-                                className="mt-2 rounded-xl border border-white/[0.06] bg-black/20 p-2"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <div className="mb-1.5 flex items-center justify-between gap-2">
-                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                                    Edit sleeve
-                                  </span>
-                                  <span className="text-[10px] tabular-nums text-muted-foreground">
-                                    {readyCopies}/{qty} ready
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const prev = copies[selectedCopyIndex - 1];
-                                      if (prev) setActiveSleeve(design.id, prev.id);
-                                    }}
-                                    disabled={selectedCopyIndex <= 0}
-                                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-black/30 text-muted-foreground transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
-                                    title="Previous sleeve"
-                                  >
-                                    <ChevronLeft size={14} />
-                                  </button>
-                                  <select
-                                    value={selectedCopy?.id ?? ''}
-                                    onChange={(e) => setActiveSleeve(design.id, e.target.value)}
-                                    className="h-8 min-w-0 flex-1 rounded-lg border border-border bg-[#111111] px-2 text-[11px] font-semibold text-foreground outline-none transition-colors focus:border-primary"
-                                    aria-label={`Choose sleeve copy for ${design.name}`}
-                                  >
-                                    {copies.map((copy, index) => (
-                                      <option key={copy.id} value={copy.id}>
-                                        Sleeve {index + 1} of {qty}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const next = copies[selectedCopyIndex + 1];
-                                      if (next) setActiveSleeve(design.id, next.id);
-                                    }}
-                                    disabled={selectedCopyIndex >= copies.length - 1}
-                                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-black/30 text-muted-foreground transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
-                                    title="Next sleeve"
-                                  >
-                                    <ChevronRight size={14} />
-                                  </button>
-                                </div>
-                              </div>
-                            )}
                           </div>
                         </div>
                       </div>
@@ -420,7 +360,7 @@ export default function MultiSleeveList() {
                   title={
                     remaining === 0
                       ? 'Pack is full — lower a design quantity to add another.'
-                      : `Add another design in "${pack.name}" (uses up to ${remaining} sleeve${remaining === 1 ? '' : 's'})`
+                      : `Add another design in "${pack.name}" — starts at 1 sleeve; use +/− to split the pack (${remaining} unassigned).`
                   }
                   className={cn(
                     'mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed py-1.5 text-[11px] font-semibold transition-colors',
@@ -558,7 +498,7 @@ export default function MultiSleeveList() {
           {previewOpen && (
             <div id="preview-grid" className="mt-2">
               <p className="mb-2 text-[10px] leading-snug text-muted-foreground/90">
-                Each tile is one printed sleeve, grouped by pack then by design.
+                One tile per design — tap to edit. Sleeve count is set with +/− on each design.
               </p>
               <div
                 className={cn(
@@ -566,16 +506,24 @@ export default function MultiSleeveList() {
                   '[scrollbar-width:thin]'
                 )}
               >
-                <div className="grid grid-cols-5 gap-1 sm:grid-cols-6">
-                  {previewTiles.map((tile) => (
+                <div className="grid grid-cols-3 gap-1.5 lg:grid-cols-4">
+                  {previewDesignTiles.map((tile) => (
                     <button
                       key={tile.key}
                       type="button"
-                      onClick={() => setActiveSleeve(tile.designId, tile.copyId)}
-                      title={`${tile.packName} · ${tile.designName} · ${tile.sleeveIndex + 1}/${tile.designTotal}`}
+                      onClick={() => setActiveSleeve(tile.designId)}
+                      title={
+                        tile.quantity > 1
+                          ? `${tile.packName} · ${tile.designName} · ${tile.quantity} sleeves`
+                          : `${tile.packName} · ${tile.designName}`
+                      }
                       className={cn(
                         'relative aspect-[52/72] overflow-hidden rounded border',
-                        tile.previewUrl ? 'border-primary/40' : 'border-border/80'
+                        tile.designId === activeSleeveId
+                          ? 'border-primary ring-1 ring-primary/40'
+                          : tile.previewUrl
+                            ? 'border-primary/40'
+                            : 'border-border/80'
                       )}
                     >
                       {tile.previewUrl ? (
@@ -588,6 +536,11 @@ export default function MultiSleeveList() {
                       ) : (
                         <span className="flex h-full w-full items-center justify-center bg-black/55 text-[7px] text-muted-foreground">
                           —
+                        </span>
+                      )}
+                      {tile.quantity > 1 && (
+                        <span className="absolute bottom-0.5 right-0.5 rounded bg-black/75 px-1 py-px font-mono text-[8px] text-primary">
+                          ×{tile.quantity}
                         </span>
                       )}
                     </button>

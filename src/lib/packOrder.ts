@@ -42,6 +42,12 @@ export function canvasHasUserPhoto(canvasData: string | undefined): boolean {
   }
 }
 
+/** Whether the active design already has a user photo (re-upload replaces, not adds). */
+export function designHasUserPhoto(design: SleeveDesign | undefined): boolean {
+  if (!design) return false;
+  return canvasHasUserPhoto(design.canvasData);
+}
+
 export function sleeveCopiesForDesign(s: SleeveDesign): SleeveCopy[] {
   const quantity = Math.max(0, Math.floor(s.quantity ?? 0));
   return Array.from({ length: quantity }, (_, index) => (

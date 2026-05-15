@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useStore } from '@/store/useStore';
+import { useStore, type SleeveDesign } from '@/store/useStore';
 import { CanvasAction, dispatchCanvasAction } from '@/lib/events';
 import {
   buildImageFilters,
@@ -14,12 +14,14 @@ import { cn } from '@/lib/utils';
 import TextCanvasToolbar from '@/components/Editor/TextCanvasToolbar';
 import { Redo2, Undo2 } from 'lucide-react';
 import {
+  designHasUserPhoto,
   shouldBlockNextImageUpload,
   sleeveCopiesForDesign,
   sleeveCopyCanvasData,
   totalOrderSleeves,
 } from '@/lib/packOrder';
 import { validateUploadedImage } from '@/lib/imageValidation';
+import { appAlert } from '@/lib/appDialog';
 
 
 const CANVAS_WIDTH = 400;
@@ -104,6 +106,47 @@ function isUserLayerImage(obj: unknown): boolean {
   return t === 'image';
 }
 
+function removeUserLayerImages(cvs: Canvas) {
+  cvs.getObjects().filter(isUserLayerImage).forEach((obj) => cvs.remove(obj));
+}
+
+function applyCoverLayout(img: FabricImage, cvsHeight: number) {
+  const targetW = CANVAS_WIDTH;
+  const targetH = cvsHeight;
+  img.set({ scaleX: 1, scaleY: 1 });
+  const baseW = img.getScaledWidth() || targetW;
+  const baseH = img.getScaledHeight() || targetH;
+  const scale = Math.max(targetW / baseW, targetH / baseH);
+  img.set({
+    scaleX: scale,
+    scaleY: scale,
+    left: CANVAS_WIDTH / 2,
+    top: cvsHeight / 2,
+    originX: 'center',
+    originY: 'center',
+    selectable: true,
+    evented: true,
+    hasControls: false,
+    hasBorders: false,
+    lockMovementY: true,
+    lockMovementX: false,
+    lockScalingX: true,
+    lockScalingY: true,
+    lockRotation: true,
+    hoverCursor: 'move',
+  });
+}
+
+function applyUserImageAdjustments(img: FabricImage, adj: ImageAdjustments) {
+  (img as FabricImage & { imageAdjustments: ImageAdjustments }).imageAdjustments = adj;
+  img.filters = buildImageFilters(adj);
+  try {
+    img.applyFilters();
+  } catch {
+    /* noop */
+  }
+}
+
 /** Active user image, or the topmost user image in stacking order (for sidebar filters). */
 function getTargetUserImage(cvs: Canvas): FabricImage | null {
   const active = cvs.getActiveObject();
@@ -128,6 +171,26 @@ function reapplyLoadedImageFilters(cvs: Canvas) {
       /* noop */
     }
   });
+}
+
+/** One shared photo filter per design: all user images get the same adjustments. */
+function applyDesignPhotoFiltersToCanvas(cvs: Canvas, design: SleeveDesign | undefined) {
+  if (design?.imageAdjustments !== undefined) {
+    const merged = mergeImageAdjustments(DEFAULT_IMAGE_ADJUSTMENTS, design.imageAdjustments);
+    cvs.getObjects().forEach((obj) => {
+      if (!isUserLayerImage(obj)) return;
+      const img = obj as FabricImage & { imageAdjustments: ImageAdjustments };
+      img.imageAdjustments = merged;
+      img.filters = buildImageFilters(merged);
+      try {
+        img.applyFilters();
+      } catch {
+        /* noop */
+      }
+    });
+  } else {
+    reapplyLoadedImageFilters(cvs);
+  }
 }
 
 export default function CanvasEditor() {
@@ -224,8 +287,17 @@ export default function CanvasEditor() {
       if (isUserLayerImage(active)) {
         setActiveObjectType('image');
         setActiveTab('Photos');
-        const raw = (active as FabricImage & { imageAdjustments?: Partial<ImageAdjustments> }).imageAdjustments;
-        setPhotoAdjustments(mergeImageAdjustments(DEFAULT_IMAGE_ADJUSTMENTS, raw ?? {}));
+        const sid = latestSleeveIdRef.current;
+        const design = sid ? useStore.getState().sleeves.find((s) => s.id === sid) : undefined;
+        if (design?.imageAdjustments !== undefined) {
+          setPhotoAdjustments(
+            mergeImageAdjustments(DEFAULT_IMAGE_ADJUSTMENTS, design.imageAdjustments)
+          );
+        } else {
+          const raw = (active as FabricImage & { imageAdjustments?: Partial<ImageAdjustments> })
+            .imageAdjustments;
+          setPhotoAdjustments(mergeImageAdjustments(DEFAULT_IMAGE_ADJUSTMENTS, raw ?? {}));
+        }
         return;
       }
       setActiveObjectType(active.type);
@@ -314,6 +386,16 @@ export default function CanvasEditor() {
         // Let Fabric settle, then re-enable persistence
         setTimeout(() => {
           isLoadingRef.current = false;
+          const sid = latestSleeveIdRef.current;
+          if (sid && fabricCanvas.current === cvs) {
+            const img = getTargetUserImage(cvs);
+            if (img) {
+              const raw = (img as FabricImage & { imageAdjustments?: Partial<ImageAdjustments> })
+                .imageAdjustments;
+              const adj = mergeImageAdjustments(DEFAULT_IMAGE_ADJUSTMENTS, raw ?? {});
+              useStore.getState().updateSleeve(sid, { imageAdjustments: adj });
+            }
+          }
           saveToStore();
         }, 30);
       } catch {
@@ -372,19 +454,37 @@ export default function CanvasEditor() {
 
       switch (action.type) {
         case 'UPLOAD_IMAGE': {
-          const { packs, sessionImageUploadCount } = useStore.getState();
+          const { packs, sessionImageUploadCount, sleeves } = useStore.getState();
           const cap = totalOrderSleeves(packs);
-          if (shouldBlockNextImageUpload(packs, sessionImageUploadCount)) {
-            window.alert(
-              `You can upload at most ${cap} images in this session (one per sleeve across all your packs). The next upload would exceed that limit.`
-            );
+          if (packs.length === 0) {
+            void appAlert({
+              title: 'Add a pack first',
+              message:
+                'Choose a size on the right, then tap Start designing — then you can upload photos.',
+            });
+            break;
+          }
+          const sid = latestSleeveIdRef.current;
+          const design = sid ? sleeves.find((s) => s.id === sid) : undefined;
+          const existingOnCanvas = getTargetUserImage(cvs);
+          const isReplace =
+            Boolean(existingOnCanvas) || designHasUserPhoto(design);
+          if (!isReplace && shouldBlockNextImageUpload(packs, sessionImageUploadCount)) {
+            void appAlert({
+              title: 'Upload limit reached',
+              message: `You can upload at most ${cap} images in this session (one per sleeve across all your packs).`,
+            });
             break;
           }
           const file = action.payload;
           void (async () => {
             const validation = await validateUploadedImage(file);
             if (!validation.ok) {
-              window.alert(validation.error.message);
+              await appAlert({
+                title: 'Invalid image',
+                message: validation.error.message,
+                variant: 'destructive',
+              });
               return;
             }
             const reader = new FileReader();
@@ -393,48 +493,42 @@ export default function CanvasEditor() {
               FabricImage.fromURL(data).then((img) => {
                 if (fabricCanvas.current !== cvs) return;
                 const cvsHeight = currentHeightRef.current;
-                const targetW = CANVAS_WIDTH;
-                const targetH = cvsHeight;
 
-                img.set({ scaleX: 1, scaleY: 1 });
-                const baseW = img.getScaledWidth() || targetW;
-                const baseH = img.getScaledHeight() || targetH;
-                const scale = Math.max(targetW / baseW, targetH / baseH);
-
-                img.set({
-                  scaleX: scale,
-                  scaleY: scale,
-                  left: CANVAS_WIDTH / 2,
-                  top: cvsHeight / 2,
-                  originX: 'center',
-                  originY: 'center',
-
-                  selectable: true,
-                  evented: true,
-
-                  hasControls: false,
-                  hasBorders: false,
-                  lockMovementY: true,
-                  lockMovementX: false,
-                  lockScalingX: true,
-                  lockScalingY: true,
-                  lockRotation: true,
-                  hoverCursor: 'move',
-                });
-                const defaultAdj = { ...DEFAULT_IMAGE_ADJUSTMENTS };
-                (img as FabricImage & { imageAdjustments: typeof defaultAdj }).imageAdjustments = defaultAdj;
-                img.filters = buildImageFilters(defaultAdj);
-                try {
-                  img.applyFilters();
-                } catch {
-                  /* noop */
+                if (isReplace) {
+                  removeUserLayerImages(cvs);
                 }
+
+                applyCoverLayout(img, cvsHeight);
+
+                let adj: ImageAdjustments;
+                if (design?.imageAdjustments !== undefined) {
+                  adj = mergeImageAdjustments(
+                    DEFAULT_IMAGE_ADJUSTMENTS,
+                    design.imageAdjustments
+                  );
+                } else if (isReplace && existingOnCanvas) {
+                  adj = mergeImageAdjustments(
+                    DEFAULT_IMAGE_ADJUSTMENTS,
+                    (existingOnCanvas as FabricImage & { imageAdjustments?: Partial<ImageAdjustments> })
+                      .imageAdjustments ?? {}
+                  );
+                } else {
+                  adj = { ...DEFAULT_IMAGE_ADJUSTMENTS };
+                }
+
+                applyUserImageAdjustments(img, adj);
                 cvs.add(img);
                 cvs.setActiveObject(img);
                 cvs.renderAll();
                 updateActiveObjectState();
-                setPhotoAdjustments(defaultAdj);
-                useStore.getState().incrementSessionImageUpload();
+                setPhotoAdjustments(adj);
+                if (sid && !design?.imageAdjustments) {
+                  useStore.getState().updateSleeve(sid, { imageAdjustments: { ...adj } });
+                }
+                if (!isReplace) {
+                  useStore.getState().incrementSessionImageUpload();
+                }
+                snapshotHistory();
                 saveToStore();
               });
             };
@@ -543,6 +637,8 @@ export default function CanvasEditor() {
           cvs.setActiveObject(img);
           cvs.renderAll();
           setPhotoAdjustments(adj);
+          const sid = latestSleeveIdRef.current;
+          if (sid) useStore.getState().updateSleeve(sid, { imageAdjustments: { ...adj } });
           updateActiveObjectState();
           snapshotHistory();
           saveToStore();
@@ -551,8 +647,14 @@ export default function CanvasEditor() {
         case 'SET_IMAGE_ADJUSTMENTS': {
           const img = getTargetUserImage(cvs);
           if (!img) break;
-          const prev = (img as FabricImage & { imageAdjustments?: ImageAdjustments }).imageAdjustments;
-          const next = mergeImageAdjustments(prev ?? DEFAULT_IMAGE_ADJUSTMENTS, {
+          const sid = latestSleeveIdRef.current;
+          const designForAdj = sid ? useStore.getState().sleeves.find((s) => s.id === sid) : undefined;
+          const prevFromDesign =
+            designForAdj?.imageAdjustments !== undefined
+              ? mergeImageAdjustments(DEFAULT_IMAGE_ADJUSTMENTS, designForAdj.imageAdjustments)
+              : undefined;
+          const prevOnImg = (img as FabricImage & { imageAdjustments?: ImageAdjustments }).imageAdjustments;
+          const next = mergeImageAdjustments(prevFromDesign ?? prevOnImg ?? DEFAULT_IMAGE_ADJUSTMENTS, {
             ...action.payload,
             mode: 'manual',
           });
@@ -566,6 +668,7 @@ export default function CanvasEditor() {
           cvs.setActiveObject(img);
           cvs.renderAll();
           setPhotoAdjustments(next);
+          if (sid) useStore.getState().updateSleeve(sid, { imageAdjustments: { ...next } });
           updateActiveObjectState();
           snapshotHistory();
           saveToStore();
@@ -585,6 +688,8 @@ export default function CanvasEditor() {
           cvs.setActiveObject(img);
           cvs.renderAll();
           setPhotoAdjustments(next);
+          const sidReset = latestSleeveIdRef.current;
+          if (sidReset) useStore.getState().updateSleeve(sidReset, { imageAdjustments: { ...next } });
           updateActiveObjectState();
           snapshotHistory();
           saveToStore();
@@ -891,21 +996,37 @@ export default function CanvasEditor() {
     if (canvasData) {
       canvas.loadFromJSON(JSON.parse(canvasData)).then(() => {
         if (fabricCanvas.current !== canvas) return;
-        reapplyLoadedImageFilters(canvas);
+        const sid = latestSleeveIdRef.current;
+        const designSnap = sid ? useStore.getState().sleeves.find((s) => s.id === sid) : undefined;
+        applyDesignPhotoFiltersToCanvas(canvas, designSnap);
         canvas.renderAll();
-        lastSavedJsonRef.current = canvasData;
-        // Allow events to settle before enabling saveToStore
-        setTimeout(() => { isLoadingRef.current = false; }, 50);
+
+        const json = JSON.stringify(canvas.toObject([...CANVAS_JSON_PROPS]));
+        const dataUrl = canvas.toDataURL({ format: 'jpeg', quality: 0.8, multiplier: 1 });
+        const currentCopyId = latestSleeveCopyIdRef.current;
+        if (sid) {
+          if (currentCopyId) {
+            useStore.getState().updateSleeveCopy(sid, currentCopyId, { canvasData: json, previewUrl: dataUrl });
+          } else {
+            useStore.getState().updateSleeve(sid, { canvasData: json, previewUrl: dataUrl });
+          }
+        }
+        lastSavedJsonRef.current = json;
+        setTimeout(() => {
+          isLoadingRef.current = false;
+        }, 50);
       });
     } else {
       canvas.remove(...canvas.getObjects());
+      canvas.discardActiveObject();
       canvas.backgroundColor = '#000000';
       canvas.renderAll();
+      setActiveObjectType(null);
       const emptyJson = JSON.stringify(canvas.toObject([...CANVAS_JSON_PROPS]));
       lastSavedJsonRef.current = emptyJson;
       setTimeout(() => { isLoadingRef.current = false; }, 50);
     }
-  }, [activeSleeveId, activeSleeveCopyId]); // We omit sleeves from deps to prevent infinite loops
+  }, [activeSleeveId, activeSleeveCopyId, setActiveObjectType]); // We omit sleeves from deps to prevent infinite loops
 
   const FONT_FAMILIES = [
     'Inter',
