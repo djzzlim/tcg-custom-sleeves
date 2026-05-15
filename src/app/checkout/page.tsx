@@ -32,8 +32,6 @@ export default function CheckoutPage() {
   }, []);
 
   const [status, setStatus] = useState<'idle' | 'exporting' | 'uploading' | 'success' | 'error'>('idle');
-  const [customerName, setCustomerName] = useState('');
-  const [customerEmail, setCustomerEmail] = useState('');
   const [uploadInfo, setUploadInfo] = useState<{ done: number; total: number; label: string } | null>(null);
 
   const handleProceedToPayment = async () => {
@@ -41,15 +39,6 @@ export default function CheckoutPage() {
     setStatus('exporting');
 
     try {
-      if (!customerName.trim() || !customerEmail.trim()) {
-        await appAlert({
-          title: 'Missing details',
-          message: 'Please provide your name and email address before proceeding.',
-        });
-        setStatus('idle');
-        return;
-      }
-
       const packCheck = orderMeetsPackRequirements(packs, sleeves);
       if (!packCheck.ok) {
         await appAlert({
@@ -146,8 +135,6 @@ export default function CheckoutPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           purchaseId,
-          customerName,
-          customerEmail,
           designs: designPayloads,
           remarks: 'From Basket Checkout',
         }),
@@ -331,32 +318,6 @@ export default function CheckoutPage() {
               <div className="border-t border-border pt-4 flex justify-between items-end">
                 <span className="text-base font-semibold">Subtotal</span>
                 <span className="text-3xl font-bold text-primary">${subtotal.toFixed(2)}</span>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-4 mb-8">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Customer information
-              </h3>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs text-muted-foreground ml-1">Full Name</label>
-                <input
-                  type="text"
-                  placeholder="John Doe"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  className="w-full bg-background border border-border rounded-lg px-4 py-2.5 text-sm focus:ring-1 focus:ring-primary outline-none transition-all"
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs text-muted-foreground ml-1">Email Address</label>
-                <input
-                  type="email"
-                  placeholder="john@example.com"
-                  value={customerEmail}
-                  onChange={(e) => setCustomerEmail(e.target.value)}
-                  className="w-full bg-background border border-border rounded-lg px-4 py-2.5 text-sm focus:ring-1 focus:ring-primary outline-none transition-all"
-                />
               </div>
             </div>
 
