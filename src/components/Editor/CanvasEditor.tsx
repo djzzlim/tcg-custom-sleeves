@@ -993,6 +993,15 @@ export default function CanvasEditor() {
 
     lastSavedJsonRef.current = null;
 
+    // Sync the sidebar adjustment sliders to the newly active design's saved values.
+    // This ensures each design has independent adjustments instead of sharing global state.
+    const snapForAdj = useStore.getState().sleeves.find((s) => s.id === activeSleeveId);
+    if (snapForAdj?.imageAdjustments !== undefined) {
+      setPhotoAdjustments(mergeImageAdjustments(DEFAULT_IMAGE_ADJUSTMENTS, snapForAdj.imageAdjustments));
+    } else {
+      setPhotoAdjustments({ ...DEFAULT_IMAGE_ADJUSTMENTS });
+    }
+
     if (canvasData) {
       canvas.loadFromJSON(JSON.parse(canvasData)).then(() => {
         if (fabricCanvas.current !== canvas) return;
@@ -1026,7 +1035,7 @@ export default function CanvasEditor() {
       lastSavedJsonRef.current = emptyJson;
       setTimeout(() => { isLoadingRef.current = false; }, 50);
     }
-  }, [activeSleeveId, activeSleeveCopyId, setActiveObjectType]); // We omit sleeves from deps to prevent infinite loops
+  }, [activeSleeveId, activeSleeveCopyId, setActiveObjectType, setPhotoAdjustments]); // We omit sleeves from deps to prevent infinite loops
 
   const FONT_FAMILIES = [
     'Inter',
