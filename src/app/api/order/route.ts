@@ -71,12 +71,10 @@ function resolveDesign(d: IncomingDesign): OutgoingDesign {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { purchaseId, remarks, designs, customerName, customerEmail } = body as {
+    const { purchaseId, remarks, designs } = body as {
       purchaseId?: string;
       remarks?: string;
       designs?: IncomingDesign[];
-      customerName?: string;
-      customerEmail?: string;
     };
 
     if (!purchaseId || !designs || !Array.isArray(designs)) {
@@ -101,8 +99,6 @@ export async function POST(request: Request) {
         purchaseId,
         remarks,
         designs: resolvedDesigns,
-        customerName,
-        customerEmail,
         status: 'Unpaid',
       }),
     });
