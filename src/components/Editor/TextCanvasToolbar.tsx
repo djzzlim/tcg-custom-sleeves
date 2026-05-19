@@ -163,16 +163,16 @@ export default function TextCanvasToolbar() {
   if (activeObjectType !== 'i-text') return null;
 
   const openColorUi = () => {
-    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches) {
-      setMobileSheetOpen(true);
-    } else {
+    if (typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches) {
       setDesktopPickerOpen((v) => !v);
+    } else {
+      setMobileSheetOpen((v) => !v);
     }
   };
 
   return (
     <>
-      <div className="relative z-30 mb-4 w-full max-w-[400px] mx-auto px-1">
+      <div className="relative z-30 mb-2 w-full max-w-[400px] mx-auto px-1 lg:mb-4">
         <div
           ref={barRef}
           className="flex items-center gap-2 rounded-2xl border border-white/10 bg-[#1a1a1a]/95 backdrop-blur-md px-2 py-2 shadow-[0_8px_32px_rgba(0,0,0,0.45)]"
@@ -221,11 +221,50 @@ export default function TextCanvasToolbar() {
           </button>
         </div>
 
+        {/* Mobile: inline color strip (no full-screen sheet) */}
+        {mobileSheetOpen && (
+          <div className="mt-1.5 flex items-center gap-1.5 overflow-x-auto px-0.5 pb-0.5 lg:hidden [scrollbar-width:none]">
+            <button
+              type="button"
+              onClick={() => applyColor(TEXT_FILL_DEFAULT)}
+              className={cn(
+                'shrink-0 rounded-md border px-2 py-1 text-[9px] font-semibold uppercase',
+                textProps.fill.toLowerCase() === TEXT_FILL_DEFAULT.toLowerCase()
+                  ? 'border-primary text-primary'
+                  : 'border-white/15 text-muted-foreground'
+              )}
+            >
+              Def
+            </button>
+            {EDITOR_PRESET_COLORS.map((c) => (
+              <button
+                key={`m-${c}`}
+                type="button"
+                onClick={() => applyColor(c)}
+                className={cn(
+                  'h-7 w-7 shrink-0 rounded-full border-2',
+                  textProps.fill.toLowerCase() === c.toLowerCase()
+                    ? 'border-primary ring-1 ring-primary/50'
+                    : 'border-white/15'
+                )}
+                style={{ backgroundColor: c }}
+              />
+            ))}
+            <input
+              type="color"
+              value={textProps.fill}
+              onChange={(e) => applyColor(e.target.value)}
+              className="h-7 w-7 shrink-0 cursor-pointer rounded-full border border-white/20 bg-transparent p-0"
+              aria-label="Custom text color"
+            />
+          </div>
+        )}
+
         {/* Desktop: floating palette */}
         {desktopPickerOpen && (
           <div
             ref={popoverRef}
-            className="absolute left-1/2 top-full z-40 mt-2 hidden w-[min(360px,calc(100vw-2rem))] -translate-x-1/2 md:block"
+            className="absolute left-1/2 top-full z-40 mt-2 hidden w-[min(360px,calc(100vw-2rem))] -translate-x-1/2 lg:block"
           >
             <div className="rounded-2xl border border-white/10 bg-[#1e1e1e] p-3 shadow-2xl">
               <div className="mb-3 flex items-center justify-between gap-2 border-b border-white/5 pb-2">
@@ -263,57 +302,6 @@ export default function TextCanvasToolbar() {
         )}
       </div>
 
-      {/* Mobile: bottom sheet */}
-      {mobileSheetOpen && (
-        <div className="fixed inset-0 z-[100] md:hidden">
-          <button
-            type="button"
-            className="absolute inset-0 bg-black/60"
-            aria-label="Close color picker"
-            onClick={() => setMobileSheetOpen(false)}
-          />
-          <div className="absolute bottom-0 left-0 right-0 max-h-[78vh] overflow-y-auto rounded-t-2xl border-t border-white/10 bg-[#1a1a1a] shadow-[0_-12px_40px_rgba(0,0,0,0.5)]">
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/5 bg-[#1a1a1a] px-4 py-3">
-              <span className="text-sm font-semibold">Text color</span>
-              <div className="flex items-center gap-2">
-                {eyeDropperSupported && (
-                  <button
-                    type="button"
-                    onClick={() => void tryEyeDropper()}
-                    className="rounded-lg border border-white/10 p-2 text-muted-foreground hover:bg-white/5"
-                    title="Pick from screen"
-                  >
-                    <Pipette size={18} />
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setMobileSheetOpen(false)}
-                  className="rounded-lg border border-white/10 p-2 text-muted-foreground hover:bg-white/5"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-            </div>
-            <div className="p-4">
-              <TextFillPresetRow value={textProps.fill} onPick={(c) => applyColor(c)} />
-              <ColorSwatchGrid value={textProps.fill} onPick={(c) => applyColor(c)} palette={TEXT_COLOR_GRID} />
-              <label className="mt-4 flex cursor-pointer items-center gap-3 rounded-xl border border-white/10 bg-black/30 px-3 py-3">
-                <input
-                  type="color"
-                  value={textProps.fill}
-                  onChange={(e) => applyColor(e.target.value)}
-                  className="h-10 w-10 cursor-pointer rounded-lg border border-white/20 bg-transparent"
-                />
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium">Custom</span>
-                  <span className="font-mono text-xs text-muted-foreground">{textProps.fill}</span>
-                </div>
-              </label>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }

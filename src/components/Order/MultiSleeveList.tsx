@@ -223,7 +223,7 @@ export default function MultiSleeveList() {
                         <div className="flex items-start gap-2">
                           <div
                             className={cn(
-                              'relative aspect-[52/72] h-14 shrink-0 overflow-hidden rounded border',
+                              'relative aspect-[52/72] h-14 shrink-0 overflow-hidden rounded border lg:h-[4.75rem]',
                               complete ? 'border-primary/50' : 'border-border/80'
                             )}
                           >
@@ -398,7 +398,7 @@ export default function MultiSleeveList() {
                 type="button"
                 onClick={() => setSetupSize(size)}
                 className={cn(
-                  'flex-1 rounded-lg border py-2 text-sm font-semibold transition-colors',
+                  'flex-1 rounded-lg border py-2.5 text-sm font-semibold transition-colors lg:py-3.5 lg:text-base',
                   setupSize === size
                     ? 'border-primary bg-primary/15 text-primary'
                     : 'border-border text-muted-foreground hover:border-muted-foreground hover:text-foreground'
@@ -419,7 +419,7 @@ export default function MultiSleeveList() {
                 type="button"
                 onClick={() => setSetupCut(t)}
                 className={cn(
-                  'flex-1 rounded-lg border py-2 text-sm font-semibold transition-colors',
+                  'flex-1 rounded-lg border py-2.5 text-sm font-semibold transition-colors lg:py-3.5 lg:text-base',
                   setupCut === t
                     ? 'border-primary bg-primary/15 text-primary'
                     : 'border-border text-muted-foreground hover:border-muted-foreground hover:text-foreground'
@@ -469,9 +469,9 @@ export default function MultiSleeveList() {
         </button>
       )}
 
-      {/* Preview */}
+      {/* Preview — desktop sidebar only */}
       {hasPacks && (
-        <div className="rounded-lg border border-border/80 bg-black/30 p-2">
+        <div className="hidden lg:block rounded-lg border border-border/80 bg-black/30 p-2">
           <button
             type="button"
             onClick={() => setPreviewOpen((v) => !v)}
@@ -502,11 +502,11 @@ export default function MultiSleeveList() {
               </p>
               <div
                 className={cn(
-                  'max-h-52 overflow-y-auto overscroll-contain rounded-md border border-white/[0.06] bg-black/25 p-1.5',
+                  'max-h-52 overflow-y-auto overscroll-contain rounded-md border border-white/[0.06] bg-black/25 p-2 lg:max-h-[22rem]',
                   '[scrollbar-width:thin]'
                 )}
               >
-                <div className="grid grid-cols-3 gap-1.5 lg:grid-cols-4">
+                <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
                   {previewDesignTiles.map((tile) => (
                     <button
                       key={tile.key}

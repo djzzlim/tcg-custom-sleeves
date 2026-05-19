@@ -7,6 +7,7 @@ import Mockup3D from '@/components/Preview/Mockup3D';
 import MultiSleeveList from '@/components/Order/MultiSleeveList';
 import EditorSidebar from '@/components/Editor/EditorSidebar';
 import EditorSubPanel from '@/components/Editor/EditorSubPanel';
+import MobileEditorLayout from '@/components/Mobile/MobileEditorLayout';
 
 import { ShoppingCart } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -20,8 +21,6 @@ export default function Home() {
     packs,
     sleeves,
     activeSleeveId,
-    mobileOrderOpen,
-    setMobileOrderOpen,
   } = useStore();
 
   const [isCheckingOut] = useState(false);
@@ -73,105 +72,56 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Main Workspace */}
-      <div className="flex-1 flex overflow-hidden pb-16 lg:pb-0">
-
-        {/* Left Sidebars */}
-        <div className="contents lg:flex lg:h-full lg:flex-shrink-0">
+      {/* Desktop workspace */}
+      <div className="hidden lg:flex flex-1 overflow-hidden min-h-0">
+        <div className="flex h-full flex-shrink-0">
           <EditorSidebar />
           <EditorSubPanel />
         </div>
 
-        {/* Center Canvas */}
-        <section className="flex-1 relative bg-[#2b2b2b] flex items-center justify-center overflow-hidden">
+        <section className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-[#2b2b2b]">
           {activeSleeveId ? (
             <CanvasEditor />
           ) : (
-            <div className="max-w-md px-6 text-center text-sm text-muted-foreground">
-              {packs.length === 0 ? (
-                <p>
-                  Set up your first pack{' '}
-                  <span className="hidden lg:inline">on the right</span>
-                  <span className="lg:hidden">
-                    — tap <strong>Order</strong> below
-                  </span>
-                  {' '}— pick <strong>65 or 110 sleeves</strong> and{' '}
-                  <strong>Standard or Japanese</strong>, then start designing. You can add more packs later.
-                </p>
-              ) : (
-                <p className="italic">
-                  Pick a design{' '}
-                  <span className="hidden lg:inline">on the right</span>
-                  <span className="lg:hidden">from the Order menu</span>{' '}
-                  to edit it.
-                </p>
-              )}
+            <div className="flex h-full items-center justify-center px-6">
+              <div className="max-w-md text-center text-sm text-muted-foreground">
+                {packs.length === 0 ? (
+                  <p>
+                    Set up your first pack on the right — pick <strong>65 or 110 sleeves</strong> and{' '}
+                    <strong>Standard or Japanese</strong>, then start designing. You can add more packs later.
+                  </p>
+                ) : (
+                  <p className="italic">Pick a design on the right to edit it.</p>
+                )}
+              </div>
             </div>
           )}
         </section>
 
-        {/* Right Sidebar (desktop) */}
-        <aside className="hidden lg:flex w-80 border-l border-border bg-[#1e1e1e] flex-col flex-shrink-0 z-10">
-          <div className="p-4 border-b border-border flex-shrink-0">
+        <aside className="flex w-80 flex-shrink-0 flex-col border-l border-border bg-[#1e1e1e] z-10">
+          <div className="flex-shrink-0 border-b border-border p-4">
             <h2 className="text-sm font-semibold uppercase text-muted-foreground">Order overview</h2>
           </div>
 
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto min-h-0">
             <MultiSleeveList />
           </div>
 
-          <div className="h-64 border-t border-border bg-black relative flex-shrink-0 flex flex-col">
-            <div className="p-2 border-b border-border bg-[#181818] z-10">
+          <div className="relative flex h-64 flex-shrink-0 flex-col border-t border-border bg-black">
+            <div className="z-10 border-b border-border bg-[#181818] p-2">
               <h2 className="text-xs font-semibold uppercase text-muted-foreground">3D Preview</h2>
             </div>
-            <div className="flex-1">
+            <div className="flex-1 min-h-0">
               <Mockup3D />
             </div>
           </div>
         </aside>
       </div>
 
-      {/* Mobile order sheet */}
-      {mobileOrderOpen && (
-        <div
-          className="lg:hidden fixed inset-0 bg-black/40 z-30"
-          onClick={() => setMobileOrderOpen(false)}
-          aria-hidden
-        />
-      )}
-      <aside
-        className={
-          'lg:hidden fixed left-0 right-0 bottom-16 z-40 ' +
-          'max-h-[80vh] flex flex-col rounded-t-2xl shadow-2xl border-t border-border bg-[#1e1e1e] ' +
-          'transition-transform duration-200 ease-out ' +
-          (mobileOrderOpen ? 'translate-y-0' : 'translate-y-[110%] pointer-events-none')
-        }
-        aria-hidden={!mobileOrderOpen}
-      >
-        <div className="flex items-center justify-center pt-2">
-          <span className="block h-1 w-10 rounded-full bg-white/20" aria-hidden />
-        </div>
-        <div className="p-3 border-b border-border flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase text-muted-foreground">Order overview</h2>
-          <button
-            onClick={() => setMobileOrderOpen(false)}
-            className="text-xs text-muted-foreground hover:text-foreground px-2 py-1"
-          >
-            Close
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          <MultiSleeveList />
-        </div>
-        <div className="h-48 border-t border-border bg-black relative flex-shrink-0 flex flex-col">
-          <div className="p-2 border-b border-border bg-[#181818] z-10">
-            <h2 className="text-xs font-semibold uppercase text-muted-foreground">3D Preview</h2>
-          </div>
-          <div className="flex-1">
-            {mobileOrderOpen && <Mockup3D />}
-          </div>
-        </div>
-      </aside>
+      {/* Mobile workspace — separate flow, no laptop sidebar / 3D / preview grid */}
+      <div className="flex flex-1 flex-col overflow-hidden min-h-0 lg:hidden pb-[calc(4rem+env(safe-area-inset-bottom))]">
+        <MobileEditorLayout />
+      </div>
     </main>
   );
 }
