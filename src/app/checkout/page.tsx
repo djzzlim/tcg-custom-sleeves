@@ -3,6 +3,7 @@
 import { useStore } from '@/store/useStore';
 import { useRouter } from 'next/navigation';
 import { ChevronDown, ChevronLeft, CreditCard, Loader2 } from 'lucide-react';
+import DesignQuantityStepper from '@/components/shared/DesignQuantityStepper';
 import { useEffect, useState } from 'react';
 import { exportDesignToHighRes } from '@/lib/export';
 import {
@@ -12,19 +13,22 @@ import {
   sleeveCopyCanvasData,
   sleeveCopyPreviewUrl,
   totalSleevesAssigned,
+  maxQuantityForDesignInPack,
 } from '@/lib/packOrder';
+import type { Pack, SleeveDesign } from '@/store/useStore';
 import {
   uploadBlobInChunks,
   dataUrlToBlob,
   MAX_OUTPUT_BYTES,
 } from '@/lib/chunkedUpload';
 import { appAlert } from '@/lib/appDialog';
+import { cn } from '@/lib/utils';
 
 const PRICE_PER_SLEEVE = 1.0;
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { packs, sleeves, purchaseId } = useStore();
+  const { packs, sleeves, purchaseId, setDesignQuantity } = useStore();
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
@@ -167,7 +171,12 @@ export default function CheckoutPage() {
   const packCheck = orderMeetsPackRequirements(packs, sleeves);
   const totalSleevesCount = sleeves.reduce((acc, s) => acc + (s.quantity ?? 0), 0);
   const subtotal = totalSleevesCount * PRICE_PER_SLEEVE;
-  const renderDesignCard = (design: (typeof sleeves)[number]) => (
+  const renderDesignCard = (design: SleeveDesign, pack: Pack) => {
+    const packDesigns = designsInPack(sleeves, pack.id);
+    const qty = design.quantity ?? 0;
+    const maxQty = maxQuantityForDesignInPack(packDesigns, design.id, pack.size);
+
+    return (
     <div
       key={design.id}
       className="flex gap-4 p-3 rounded-xl bg-card border border-border"
@@ -194,20 +203,21 @@ export default function CheckoutPage() {
           <h3 className="text-base font-bold text-primary truncate">
             {design.name}
           </h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            <span className="font-mono text-foreground">
-              {design.quantity ?? 0}x
-            </span>
-          </p>
+          <p className="mt-1 text-xs text-muted-foreground">Sleeves in this pack</p>
         </div>
-        <div className="flex items-center justify-end">
-          <span className="font-semibold">
-            ${((design.quantity ?? 0) * PRICE_PER_SLEEVE).toFixed(2)}
-          </span>
+        <div className="flex flex-col items-end justify-between gap-2 py-1">
+          <DesignQuantityStepper
+            value={qty}
+            max={maxQty}
+            onChange={(n) => setDesignQuantity(design.id, n)}
+            maxHint={`Max ${maxQty} in this pack`}
+          />
+          <span className="font-semibold">${(qty * PRICE_PER_SLEEVE).toFixed(2)}</span>
         </div>
       </div>
     </div>
-  );
+    );
+  };
 
   return (
     <main className="min-h-[100dvh] overflow-y-auto bg-background text-foreground font-sans flex flex-col">
@@ -259,6 +269,14 @@ export default function CheckoutPage() {
                         {pack.size} sleeves ·{' '}
                         {pack.sleeveType === 'Japanese' ? 'Japanese (62×89mm)' : 'Standard (5:7)'} · Matte
                       </p>
+                      <p
+                        className={cn(
+                          'mt-1 font-mono text-xs tabular-nums',
+                          packAssigned === pack.size ? 'text-primary' : 'text-amber-300'
+                        )}
+                      >
+                        {packAssigned}/{pack.size} assigned
+                      </p>
                     </div>
                     <span className="text-sm font-mono text-muted-foreground">
                       ${packSubtotal.toFixed(2)}
@@ -266,7 +284,14 @@ export default function CheckoutPage() {
                   </div>
 
                   <div className="flex flex-col gap-4">
-                    {visibleDesigns.map(renderDesignCard)}
+                    {visibleDesigns.map((design) => renderDesignCard(design, pack))}
+
+                    {packAssigned !== pack.size && (
+                      <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                        This pack has {packAssigned}/{pack.size} sleeves assigned. Adjust quantities so
+                        they total {pack.size} before payment.
+                      </p>
+                    )}
 
                     {dropdownDesigns.length > 0 && (
                       <details className="group rounded-xl border border-border bg-card/60">
@@ -282,7 +307,7 @@ export default function CheckoutPage() {
                         </summary>
                         <div className="max-h-[360px] overflow-y-auto border-t border-border p-3">
                           <div className="flex flex-col gap-4">
-                            {dropdownDesigns.map(renderDesignCard)}
+                            {dropdownDesigns.map((design) => renderDesignCard(design, pack))}
                           </div>
                         </div>
                       </details>

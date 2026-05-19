@@ -5,23 +5,27 @@ import {
   Image as ImageIcon,
   Frame,
   Type,
-  Layers,
+  LayoutGrid,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const tabs: { id: Exclude<EditorTab, null>; label: string; icon: any }[] = [
+const desktopTabs: { id: Exclude<EditorTab, null | 'Preview' | 'Adjustments'>; label: string; icon: typeof ImageIcon }[] = [
   { id: 'Photos', label: 'Photos', icon: ImageIcon },
   { id: 'Frames', label: 'Frames', icon: Frame },
   { id: 'Text', label: 'Text', icon: Type },
 ];
 
+const mobileTabs: { id: Exclude<EditorTab, null>; label: string; icon: typeof ImageIcon }[] = [
+  { id: 'Photos', label: 'Photos', icon: ImageIcon },
+  { id: 'Adjustments', label: 'Adjust', icon: SlidersHorizontal },
+  { id: 'Frames', label: 'Frames', icon: Frame },
+  { id: 'Text', label: 'Text', icon: Type },
+  { id: 'Preview', label: 'Preview', icon: LayoutGrid },
+];
+
 export default function EditorSidebar() {
-  const {
-    activeTab,
-    setActiveTab,
-    mobileOrderOpen,
-    setMobileOrderOpen,
-  } = useStore();
+  const { activeTab, setActiveTab } = useStore();
 
   const handleTabClick = (tabId: Exclude<EditorTab, null>) => {
     // Tapping the active tab again closes the panel — important for mobile UX.
@@ -29,20 +33,14 @@ export default function EditorSidebar() {
       setActiveTab(null);
     } else {
       setActiveTab(tabId);
-      setMobileOrderOpen(false);
     }
-  };
-
-  const handleOrderClick = () => {
-    setMobileOrderOpen(!mobileOrderOpen);
-    if (!mobileOrderOpen) setActiveTab(null);
   };
 
   return (
     <>
       {/* Desktop: left rail */}
       <div className="hidden lg:flex w-20 bg-[#1e1e1e] border-r border-border h-full flex-col items-center py-4 gap-2 z-10">
-        {tabs.map((tab) => {
+        {desktopTabs.map((tab) => {
           const isActive = activeTab === tab.id;
           const Icon = tab.icon;
           return (
@@ -71,7 +69,7 @@ export default function EditorSidebar() {
         aria-label="Editor sections"
         className="lg:hidden fixed bottom-0 left-0 right-0 z-40 h-16 bg-[#1e1e1e] border-t border-border flex items-stretch justify-around px-2 pb-[env(safe-area-inset-bottom)]"
       >
-        {tabs.map((tab) => {
+        {mobileTabs.map((tab) => {
           const isActive = activeTab === tab.id;
           const Icon = tab.icon;
           return (
@@ -79,26 +77,17 @@ export default function EditorSidebar() {
               key={tab.id}
               onClick={() => handleTabClick(tab.id)}
               className={cn(
-                'flex flex-1 flex-col items-center justify-center gap-0.5 rounded-md transition-colors',
+                'flex flex-1 flex-col items-center justify-center gap-0.5 rounded-md transition-colors min-w-0 px-0.5',
                 isActive ? 'text-primary' : 'text-muted-foreground'
               )}
             >
               <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
-              <span className="text-[10px] font-medium leading-tight">{tab.label}</span>
+              <span className="text-[9px] font-medium leading-tight truncate max-w-full">
+                {tab.label}
+              </span>
             </button>
           );
         })}
-        <button
-          onClick={handleOrderClick}
-          aria-pressed={mobileOrderOpen}
-          className={cn(
-            'flex flex-1 flex-col items-center justify-center gap-0.5 rounded-md transition-colors',
-            mobileOrderOpen ? 'text-primary' : 'text-muted-foreground'
-          )}
-        >
-          <Layers size={20} strokeWidth={mobileOrderOpen ? 2.5 : 2} />
-          <span className="text-[10px] font-medium leading-tight">Order</span>
-        </button>
       </nav>
     </>
   );

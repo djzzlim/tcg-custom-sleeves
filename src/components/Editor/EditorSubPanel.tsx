@@ -36,6 +36,7 @@ import {
   formatBytes,
   validateUploadedImage,
 } from '@/lib/imageValidation';
+import { EDITOR_FRAME_CHOICES } from '@/lib/editorFrames';
 
 export default function EditorSubPanel() {
   const {
@@ -47,7 +48,6 @@ export default function EditorSubPanel() {
     sleeves,
     activeSleeveId,
     sessionImageUploadCount,
-    setActiveTab,
   } = useStore();
   const totalCap = totalOrderSleeves(packs);
   const hasPack = packs.length > 0;
@@ -59,29 +59,16 @@ export default function EditorSubPanel() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  if (!activeTab) return null;
+  if (!activeTab || activeTab === 'Preview' || activeTab === 'Adjustments') return null;
 
   return (
-    <>
-      {/* Mobile backdrop — tap to close. */}
-      <div
-        className="lg:hidden fixed inset-0 bg-black/40 z-30"
-        onClick={() => setActiveTab(null)}
-        aria-hidden
-      />
       <div
         className={cn(
-          // Desktop: inline left panel.
-          'lg:relative lg:w-72 lg:h-full lg:rounded-none lg:border-r lg:border-t-0 lg:bottom-auto lg:left-auto lg:right-auto lg:max-h-none lg:shadow-none',
-          // Mobile: bottom sheet sitting above the bottom nav (h-16).
-          'fixed left-0 right-0 bottom-16 max-h-[70vh] z-40 rounded-t-2xl border-t border-border shadow-2xl',
-          'bg-[#222222] overflow-y-auto p-4 flex flex-col'
+          'hidden lg:flex lg:flex-col',
+          'lg:relative lg:w-72 lg:h-full lg:rounded-none lg:border-r lg:border-t-0 lg:max-h-none lg:shadow-none',
+          'bg-[#222222] overflow-y-auto p-4'
         )}
       >
-        {/* Mobile-only grab handle. */}
-        <div className="lg:hidden flex items-center justify-center mb-2">
-          <span className="block h-1 w-10 rounded-full bg-white/20" aria-hidden />
-        </div>
         <h2 className="text-xl font-serif italic mb-4">{activeTab}</h2>
 
       {activeTab === 'Photos' && (
@@ -379,19 +366,7 @@ export default function EditorSubPanel() {
             <>
               <p className="text-sm text-foreground">Choose a frame style:</p>
               <div className="grid grid-cols-2 gap-[2px] bg-border p-[2px] border border-border">
-                {[
-                  { id: 'none', label: 'Sleeveless', src: null },
-                  { id: 'standard', src: '/frames/01.svg?v=8' },
-                  { id: 'fade', src: '/frames/02.svg?v=8' },
-                  { id: 'torn1', src: '/frames/03.svg?v=8' },
-                  { id: 'torn2', src: '/frames/04.svg?v=8' },
-                  { id: 'wobble', src: '/frames/05.svg?v=8' },
-                  { id: 'floral', src: '/frames/06.svg?v=8' },
-                  { id: 'scallop', src: '/frames/07.svg?v=8' },
-                  { id: 'stamp', src: '/frames/08.svg?v=8' },
-                  { id: 'wavy', src: '/frames/09.svg?v=8' },
-                  { id: 'zigzag', src: '/frames/10.svg?v=8' },
-                ].map((frame) => (
+                {EDITOR_FRAME_CHOICES.map((frame) => (
                   <button
                     key={frame.id}
                     onClick={() => dispatchCanvasAction({ type: 'APPLY_FRAME', payload: frame.id })}
@@ -705,6 +680,5 @@ export default function EditorSubPanel() {
         </div>
       )}
       </div>
-    </>
   );
 }

@@ -8,7 +8,7 @@ import {
   totalSleevesAssigned,
 } from '@/lib/packOrder';
 
-export type EditorTab = 'Photos' | 'Frames' | 'Text' | null;
+export type EditorTab = 'Photos' | 'Adjustments' | 'Frames' | 'Text' | 'Preview' | null;
 
 export interface Pack {
   id: string;
@@ -59,8 +59,12 @@ interface AppState {
   sessionImageUploadCount: number;
   remarks: string;
   activeTab: EditorTab;
-  /** Mobile-only: whether the order/preview bottom sheet is open. */
+  /** @deprecated Mobile order sheet removed; use mobileDesignsSheetExpanded. */
   mobileOrderOpen: boolean;
+  /** Mobile designs strip: expanded (thumbnails visible) vs collapsed (handle only). */
+  mobileDesignsSheetExpanded: boolean;
+  /** Mobile bottom sheet to add another pack (after the first). */
+  mobileAddPackOpen: boolean;
 
   // Editor state
   activeObjectType: string | null;
@@ -99,6 +103,8 @@ interface AppState {
   generatePurchaseId: () => void;
   setActiveTab: (tab: EditorTab) => void;
   setMobileOrderOpen: (open: boolean) => void;
+  setMobileDesignsSheetExpanded: (open: boolean) => void;
+  setMobileAddPackOpen: (open: boolean) => void;
   setActiveObjectType: (type: string | null) => void;
   setTextProps: (props: Partial<AppState['textProps']>) => void;
   setPhotoAdjustments: (props: Partial<ImageAdjustments>) => void;
@@ -114,6 +120,8 @@ export const useStore = create<AppState>((set) => ({
   remarks: '',
   activeTab: 'Photos',
   mobileOrderOpen: false,
+  mobileDesignsSheetExpanded: true,
+  mobileAddPackOpen: false,
   activeObjectType: null,
   photoAdjustments: { ...DEFAULT_IMAGE_ADJUSTMENTS },
   textProps: {
@@ -317,6 +325,9 @@ export const useStore = create<AppState>((set) => ({
   setActiveTab: (tab) => set({ activeTab: tab }),
 
   setMobileOrderOpen: (open) => set({ mobileOrderOpen: open }),
+
+  setMobileDesignsSheetExpanded: (open) => set({ mobileDesignsSheetExpanded: open }),
+  setMobileAddPackOpen: (open) => set({ mobileAddPackOpen: open }),
 
   setActiveObjectType: (type) => set({ activeObjectType: type }),
 

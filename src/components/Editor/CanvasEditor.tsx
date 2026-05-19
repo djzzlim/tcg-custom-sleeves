@@ -52,13 +52,20 @@ function FluidCanvasFrame({
     const probe = probeRef.current;
     if (!probe) return;
     const measure = () => {
-      // The probe is `width: 100%` inside the column-flex parent, so its
-      // clientWidth tracks the maximum width available to the canvas.
-      const avail = probe.clientWidth;
-      if (avail <= 0) return;
-      // Never upscale; leave a tiny breathing room.
-      const next = Math.min(1, Math.max(0.1, (avail - 4) / width));
-      setScale(next);
+      const availW = probe.clientWidth;
+      if (availW <= 0) return;
+      const scaleW = (availW - 4) / width;
+      let next = scaleW;
+      // Mobile only: also fit remaining vertical space between top/bottom chrome.
+      const isMobileLayout =
+        typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches;
+      if (isMobileLayout) {
+        const availH = probe.clientHeight;
+        if (availH > 48) {
+          next = Math.min(scaleW, (availH - 4) / height);
+        }
+      }
+      setScale(Math.min(1, Math.max(0.1, next)));
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -68,10 +75,13 @@ function FluidCanvasFrame({
       ro.disconnect();
       window.removeEventListener('orientationchange', measure);
     };
-  }, [width]);
+  }, [width, height]);
 
   return (
-    <div ref={probeRef} className="w-full flex justify-center">
+    <div
+      ref={probeRef}
+      className="flex w-full min-h-0 flex-1 items-center justify-center lg:min-h-0 lg:flex-none"
+    >
       <div
         style={{
           width: width * scale,
@@ -286,7 +296,10 @@ export default function CanvasEditor() {
       }
       if (isUserLayerImage(active)) {
         setActiveObjectType('image');
-        setActiveTab('Photos');
+        // Stay on Adjustments while tuning sliders (mobile); otherwise open Photos tools.
+        if (useStore.getState().activeTab !== 'Adjustments') {
+          setActiveTab('Photos');
+        }
         const sid = latestSleeveIdRef.current;
         const design = sid ? useStore.getState().sleeves.find((s) => s.id === sid) : undefined;
         if (design?.imageAdjustments !== undefined) {
@@ -854,6 +867,13 @@ export default function CanvasEditor() {
           saveToStore();
           break;
         }
+        case 'FORCE_SAVE': {
+          if (!isLoadingRef.current) {
+            snapshotHistory();
+            saveToStore();
+          }
+          break;
+        }
       }
     };
 
@@ -993,6 +1013,15 @@ export default function CanvasEditor() {
 
     lastSavedJsonRef.current = null;
 
+    // Sync the sidebar adjustment sliders to the newly active design's saved values.
+    // This ensures each design has independent adjustments instead of sharing global state.
+    const snapForAdj = useStore.getState().sleeves.find((s) => s.id === activeSleeveId);
+    if (snapForAdj?.imageAdjustments !== undefined) {
+      setPhotoAdjustments(mergeImageAdjustments(DEFAULT_IMAGE_ADJUSTMENTS, snapForAdj.imageAdjustments));
+    } else {
+      setPhotoAdjustments({ ...DEFAULT_IMAGE_ADJUSTMENTS });
+    }
+
     if (canvasData) {
       canvas.loadFromJSON(JSON.parse(canvasData)).then(() => {
         if (fabricCanvas.current !== canvas) return;
@@ -1026,7 +1055,7 @@ export default function CanvasEditor() {
       lastSavedJsonRef.current = emptyJson;
       setTimeout(() => { isLoadingRef.current = false; }, 50);
     }
-  }, [activeSleeveId, activeSleeveCopyId, setActiveObjectType]); // We omit sleeves from deps to prevent infinite loops
+  }, [activeSleeveId, activeSleeveCopyId, setActiveObjectType, setPhotoAdjustments]); // We omit sleeves from deps to prevent infinite loops
 
   const FONT_FAMILIES = [
     'Inter',
@@ -1042,12 +1071,12 @@ export default function CanvasEditor() {
   ];
 
   return (
-    <div className="flex flex-col items-center justify-start w-full h-full pt-3 px-2 pb-4 sm:pt-12 sm:p-8 overflow-auto bg-[#2b2b2b]">
-      <div className="mb-3 sm:mb-6 flex items-center justify-center gap-2">
+    <div className="flex h-full min-h-0 w-full flex-col items-center justify-start overflow-hidden bg-[#2b2b2b] px-2 pt-2 pb-1 lg:justify-center lg:overflow-auto lg:p-6 lg:pt-8">
+      <div className="mb-1.5 flex shrink-0 items-center justify-center gap-1.5 lg:mb-6 lg:gap-2">
         <button
           type="button"
           onClick={() => dispatchCanvasAction({ type: 'UNDO' })}
-          className="h-10 w-10 rounded-xl border border-white/10 bg-black/30 hover:bg-black/40 text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center"
+          className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-black/30 text-muted-foreground transition-colors hover:bg-black/40 hover:text-foreground lg:h-10 lg:w-10 lg:rounded-xl"
           title="Undo (Ctrl/Cmd+Z)"
           aria-label="Undo"
         >
@@ -1056,7 +1085,7 @@ export default function CanvasEditor() {
         <button
           type="button"
           onClick={() => dispatchCanvasAction({ type: 'REDO' })}
-          className="h-10 w-10 rounded-xl border border-white/10 bg-black/30 hover:bg-black/40 text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center"
+          className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-black/30 text-muted-foreground transition-colors hover:bg-black/40 hover:text-foreground lg:h-10 lg:w-10 lg:rounded-xl"
           title="Redo (Ctrl/Cmd+Shift+Z)"
           aria-label="Redo"
         >
@@ -1064,7 +1093,9 @@ export default function CanvasEditor() {
         </button>
       </div>
 
-      <TextCanvasToolbar />
+      <div className="w-full shrink-0">
+        <TextCanvasToolbar />
+      </div>
 
       {/*
         Responsive sizer: scales the (fixed-resolution) Fabric canvas down to
@@ -1072,13 +1103,15 @@ export default function CanvasEditor() {
         untouched. Fabric maps pointer events through getBoundingClientRect()
         so a CSS transform doesn't break hit testing.
       */}
-      <FluidCanvasFrame width={CANVAS_WIDTH} height={currentHeight}>
-        <div className="relative shadow-[0_0_50px_rgba(0,0,0,0.8)] ring-1 ring-white/10 overflow-hidden bg-black">
-          <canvas ref={canvasRef} style={{ touchAction: 'none' }} />
-        </div>
-      </FluidCanvasFrame>
-      <p className="mt-4 sm:mt-8 text-[10px] text-muted-foreground uppercase tracking-[0.2em] text-center">
-        {isJapanese ? 'Japanese Sleeve (62x89mm)' : 'Standard Sleeve (5:7 Ratio)'}
+      <div className="flex w-full min-h-0 flex-1 flex-col items-center justify-center lg:flex-none lg:justify-start lg:pt-2">
+        <FluidCanvasFrame width={CANVAS_WIDTH} height={currentHeight}>
+          <div className="relative overflow-hidden bg-black shadow-[0_0_50px_rgba(0,0,0,0.8)] ring-1 ring-white/10">
+            <canvas ref={canvasRef} style={{ touchAction: 'none' }} />
+          </div>
+        </FluidCanvasFrame>
+      </div>
+      <p className="mt-1 shrink-0 text-center text-[8px] uppercase tracking-[0.15em] text-muted-foreground lg:mt-8 lg:text-[10px] lg:tracking-[0.2em]">
+        {isJapanese ? 'Japanese (62×89mm)' : 'Standard (5:7)'}
       </p>
 
       {/* Hidden preloader to force browser to download fonts before Canvas needs them */}

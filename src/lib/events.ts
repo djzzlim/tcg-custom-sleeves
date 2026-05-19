@@ -20,7 +20,8 @@ export type CanvasAction =
   | { type: 'DISCARD_CANVAS_SELECTION' }
   | { type: 'UNDO' }
   | { type: 'REDO' }
-  | { type: 'CHANGE_FRAME_COLOR'; payload: string };
+  | { type: 'CHANGE_FRAME_COLOR'; payload: string }
+  | { type: 'FORCE_SAVE' };
 
 export const dispatchCanvasAction = (action: CanvasAction) => {
   window.dispatchEvent(new CustomEvent('CANVAS_ACTION', { detail: action }));
