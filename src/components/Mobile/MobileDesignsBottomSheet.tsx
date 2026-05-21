@@ -64,15 +64,15 @@ export default function MobileDesignsBottomSheet() {
 
   return (
     <div
-      className="shrink-0 overflow-hidden border-t border-border bg-[#1e1e1e] transition-[max-height] duration-200 ease-out lg:hidden"
-      style={{ maxHeight: mobileDesignsSheetExpanded ? 'min(38vh, 280px)' : '2.75rem' }}
+      className="shrink-0 overflow-hidden border-t border-border bg-[#1e1e1e] transition-[max-height] duration-200 ease-out lg:hidden flex flex-col"
+      style={{ maxHeight: mobileDesignsSheetExpanded ? 'min(45vh, 320px)' : '2.75rem' }}
     >
       <button
         type="button"
         onClick={handleToggleExpand}
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
-        className="flex w-full items-center justify-center gap-2 py-2.5"
+        className="shrink-0 flex w-full items-center justify-center gap-2 py-2.5"
         aria-expanded={mobileDesignsSheetExpanded}
       >
         <span className="block h-1 w-10 rounded-full bg-white/25" aria-hidden />
@@ -87,7 +87,7 @@ export default function MobileDesignsBottomSheet() {
       </button>
 
       {mobileDesignsSheetExpanded && (
-        <div className="overflow-hidden px-2 pb-2">
+        <div className="overflow-y-auto px-2 pb-6 flex-1 min-h-0 [scrollbar-width:thin]">
           {packs.length > 1 && (
             <div className="mb-2 flex gap-1.5 overflow-x-auto [scrollbar-width:none]">
               {packs.map((p) => {
