@@ -116,6 +116,19 @@ function isUserLayerImage(obj: unknown): boolean {
   return t === 'image';
 }
 
+/** Serialized canvas includes a user photo (not just black background / frames). */
+function canvasJsonHasUserPhoto(json: string): boolean {
+  try {
+    const data = JSON.parse(json) as { objects?: Array<{ type?: string; isFrame?: boolean }> };
+    return (data.objects ?? []).some((o) => {
+      if (o.isFrame) return false;
+      return String(o.type || '').toLowerCase() === 'image';
+    });
+  } catch {
+    return false;
+  }
+}
+
 function removeUserLayerImages(cvs: Canvas) {
   cvs.getObjects().filter(isUserLayerImage).forEach((obj) => cvs.remove(obj));
 }
@@ -208,7 +221,20 @@ export default function CanvasEditor() {
   const fabricCanvas = useRef<Canvas | null>(null);
   const isLoadingRef = useRef(false);
   const historyRef = useRef<Map<string, HistoryStacks>>(new Map());
-  const lastSavedJsonRef = useRef<string | null>(null);
+  /** Earliest undo target per canvas: state right after photo upload (no black pre-upload). */
+  const historyFloorRef = useRef<Map<string, string>>(new Map());
+  /** Latest canvas JSON per design/copy key — keeps undo stacks isolated per design. */
+  const lastSavedJsonByKeyRef = useRef<Map<string, string>>(new Map());
+
+  const getLastSavedJson = (key: string | null): string | null => {
+    if (!key) return null;
+    return lastSavedJsonByKeyRef.current.get(key) ?? null;
+  };
+
+  const setLastSavedJson = (key: string | null, json: string) => {
+    if (!key) return;
+    lastSavedJsonByKeyRef.current.set(key, json);
+  };
 
   const getStacks = (id: string): HistoryStacks => {
     let s = historyRef.current.get(id);
@@ -218,6 +244,20 @@ export default function CanvasEditor() {
     }
     return s;
   };
+
+  const pruneHistoryStacks = (key: string) => {
+    const stacks = getStacks(key);
+    stacks.undo = stacks.undo.filter((entry) => canvasJsonHasUserPhoto(entry));
+    stacks.redo = stacks.redo.filter((entry) => canvasJsonHasUserPhoto(entry));
+  };
+
+  /** Undo cannot go earlier than this snapshot (first state with a user photo). */
+  const setHistoryFloor = (key: string, json: string) => {
+    if (!canvasJsonHasUserPhoto(json)) return;
+    historyFloorRef.current.set(key, json);
+    pruneHistoryStacks(key);
+  };
+
   const {
     activeSleeveId,
     activeSleeveCopyId,
@@ -371,11 +411,12 @@ export default function CanvasEditor() {
       const key = latestCanvasKeyRef.current;
       if (!fabricCanvas.current || isLoadingRef.current || !key) return;
       const json = JSON.stringify(fabricCanvas.current.toObject([...CANVAS_JSON_PROPS]));
-      const prev = lastSavedJsonRef.current;
+      const prev = getLastSavedJson(key);
       if (prev === json) return;
 
       const stacks = getStacks(key);
-      if (prev) {
+      const floor = historyFloorRef.current.get(key);
+      if (prev && canvasJsonHasUserPhoto(prev)) {
         stacks.undo.push(prev);
         if (stacks.undo.length > HISTORY_LIMIT) {
           stacks.undo.shift();
@@ -383,7 +424,10 @@ export default function CanvasEditor() {
       }
 
       stacks.redo = [];
-      lastSavedJsonRef.current = json;
+      setLastSavedJson(key, json);
+      if (canvasJsonHasUserPhoto(json) && !floor) {
+        setHistoryFloor(key, json);
+      }
     };
 
     const restoreFromJson = async (json: string) => {
@@ -395,7 +439,8 @@ export default function CanvasEditor() {
         if (fabricCanvas.current !== cvs) return;
         reapplyLoadedImageFilters(cvs);
         cvs.renderAll();
-        lastSavedJsonRef.current = json;
+        const restoreKey = latestCanvasKeyRef.current;
+        if (restoreKey) setLastSavedJson(restoreKey, json);
         // Let Fabric settle, then re-enable persistence
         setTimeout(() => {
           isLoadingRef.current = false;
@@ -541,7 +586,10 @@ export default function CanvasEditor() {
                 if (!isReplace) {
                   useStore.getState().incrementSessionImageUpload();
                 }
+                const key = latestCanvasKeyRef.current;
+                const json = JSON.stringify(cvs.toObject([...CANVAS_JSON_PROPS]));
                 snapshotHistory();
+                if (key) setHistoryFloor(key, json);
                 saveToStore();
               });
             };
@@ -827,22 +875,44 @@ export default function CanvasEditor() {
           const key = latestCanvasKeyRef.current;
           if (!key) break;
           const stacks = getStacks(key);
-          const prev = stacks.undo.pop();
-          if (!prev) break;
-          const current = lastSavedJsonRef.current || JSON.stringify(cvs.toObject([...CANVAS_JSON_PROPS]));
-          stacks.redo.push(current);
-          void restoreFromJson(prev);
+          const floor = historyFloorRef.current.get(key);
+          const current =
+            getLastSavedJson(key) || JSON.stringify(cvs.toObject([...CANVAS_JSON_PROPS]));
+          if (floor && current === floor) break;
+
+          while (stacks.undo.length > 0) {
+            const peek = stacks.undo[stacks.undo.length - 1];
+            if (!canvasJsonHasUserPhoto(peek)) {
+              stacks.undo.pop();
+              continue;
+            }
+            const prev = stacks.undo.pop()!;
+            stacks.redo.push(current);
+            setLastSavedJson(key, prev);
+            void restoreFromJson(prev);
+            break;
+          }
           break;
         }
         case 'REDO': {
           const key = latestCanvasKeyRef.current;
           if (!key) break;
           const stacks = getStacks(key);
-          const next = stacks.redo.pop();
-          if (!next) break;
-          const current = lastSavedJsonRef.current || JSON.stringify(cvs.toObject([...CANVAS_JSON_PROPS]));
-          stacks.undo.push(current);
-          void restoreFromJson(next);
+          const current =
+            getLastSavedJson(key) || JSON.stringify(cvs.toObject([...CANVAS_JSON_PROPS]));
+
+          while (stacks.redo.length > 0) {
+            const peek = stacks.redo[stacks.redo.length - 1];
+            if (!canvasJsonHasUserPhoto(peek)) {
+              stacks.redo.pop();
+              continue;
+            }
+            const next = stacks.redo.pop()!;
+            stacks.undo.push(current);
+            setLastSavedJson(key, next);
+            void restoreFromJson(next);
+            break;
+          }
           break;
         }
         case 'CHANGE_FRAME_COLOR': {
@@ -1008,10 +1078,16 @@ export default function CanvasEditor() {
       ])
     );
     for (const id of [...historyRef.current.keys()]) {
-      if (!currentIds.has(id)) historyRef.current.delete(id);
+      if (!currentIds.has(id)) {
+        historyRef.current.delete(id);
+        historyFloorRef.current.delete(id);
+        lastSavedJsonByKeyRef.current.delete(id);
+      }
     }
 
-    lastSavedJsonRef.current = null;
+    const canvasKey = activeSleeveId
+      ? `${activeSleeveId}:${activeSleeveCopyId ?? 'design'}`
+      : null;
 
     // Sync the sidebar adjustment sliders to the newly active design's saved values.
     // This ensures each design has independent adjustments instead of sharing global state.
@@ -1040,7 +1116,12 @@ export default function CanvasEditor() {
             useStore.getState().updateSleeve(sid, { canvasData: json, previewUrl: dataUrl });
           }
         }
-        lastSavedJsonRef.current = json;
+        if (canvasKey) {
+          setLastSavedJson(canvasKey, json);
+          if (canvasJsonHasUserPhoto(json) && !historyFloorRef.current.has(canvasKey)) {
+            setHistoryFloor(canvasKey, json);
+          }
+        }
         setTimeout(() => {
           isLoadingRef.current = false;
         }, 50);
@@ -1052,7 +1133,10 @@ export default function CanvasEditor() {
       canvas.renderAll();
       setActiveObjectType(null);
       const emptyJson = JSON.stringify(canvas.toObject([...CANVAS_JSON_PROPS]));
-      lastSavedJsonRef.current = emptyJson;
+      if (canvasKey) {
+        setLastSavedJson(canvasKey, emptyJson);
+        historyFloorRef.current.delete(canvasKey);
+      }
       setTimeout(() => { isLoadingRef.current = false; }, 50);
     }
   }, [activeSleeveId, activeSleeveCopyId, setActiveObjectType, setPhotoAdjustments]); // We omit sleeves from deps to prevent infinite loops
@@ -1077,8 +1161,8 @@ export default function CanvasEditor() {
           type="button"
           onClick={() => dispatchCanvasAction({ type: 'UNDO' })}
           className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-black/30 text-muted-foreground transition-colors hover:bg-black/40 hover:text-foreground lg:h-10 lg:w-10 lg:rounded-xl"
-          title="Undo (Ctrl/Cmd+Z)"
-          aria-label="Undo"
+          title="Undo edits (stops after your photo is on the canvas)"
+          aria-label="Undo edits"
         >
           <Undo2 size={18} />
         </button>
