@@ -31,7 +31,7 @@ export default function MobileEditorLayout() {
 
         <section className="relative min-h-0 flex-1 overflow-hidden bg-[#2b2b2b]">
           {activeSleeveId ? (
-            <CanvasEditor />
+            <CanvasEditor isMobileView={true} />
           ) : (
             <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground">
               {packs.length === 0 ? (

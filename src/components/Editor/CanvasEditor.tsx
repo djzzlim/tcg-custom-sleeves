@@ -250,7 +250,7 @@ function applyDesignPhotoFiltersToCanvas(cvs: Canvas, design: SleeveDesign | und
   }
 }
 
-export default function CanvasEditor() {
+export default function CanvasEditor({ isMobileView = false }: { isMobileView?: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fabricCanvas = useRef<Canvas | null>(null);
   const isLoadingRef = useRef(false);
@@ -541,6 +541,10 @@ export default function CanvasEditor() {
 
     // Event Listener for external actions
     const handleCanvasAction = (e: Event) => {
+      // Ignore actions if this canvas instance's viewport target doesn't match the current screen size
+      const matchesViewport = isMobileView === window.matchMedia('(max-width: 1023px)').matches;
+      if (!matchesViewport) return;
+
       const action = (e as CustomEvent<CanvasAction>).detail;
       const cvs = fabricCanvas.current;
       if (!cvs) return;
@@ -1184,6 +1188,10 @@ export default function CanvasEditor() {
   useEffect(() => {
     if (!activeSleeveId) return;
 
+    // Ignore uploads if this canvas instance's viewport target doesn't match the current screen size
+    const matchesViewport = isMobileView === window.matchMedia('(max-width: 1023px)').matches;
+    if (!matchesViewport) return;
+
     const design = sleeves.find((s) => s.id === activeSleeveId);
     if (!design) return;
 
@@ -1212,71 +1220,21 @@ export default function CanvasEditor() {
         const imageKey = `designs/${purchaseId}/${activeSleeveId}${suffix}_preview.jpg`;
         const jsonKey = `designs/${purchaseId}/${activeSleeveId}${suffix}_canvas.json`;
 
-        // Convert base64 dataURL to binary Blob
-        const dataUrlToBlob = (dataUrlStr: string) => {
-          const match = /^data:([^;,]+)(;base64)?,(.*)$/.exec(dataUrlStr);
-          if (!match) throw new Error('Invalid data URL');
-          const mime = match[1] || 'application/octet-stream';
-          const isBase64 = !!match[2];
-          const data = match[3] || '';
-          const bytes = isBase64
-            ? Uint8Array.from(atob(data), (c) => c.charCodeAt(0))
-            : new TextEncoder().encode(decodeURIComponent(data));
-          return new Blob([bytes], { type: mime });
-        };
-
-        const imageBlob = dataUrlToBlob(previewUrl);
-
-        // 1. Get pre-signed S3 URL for JPEG preview image
-        const imgPresignedRes = await fetch('/api/upload/s3-presigned', {
+        // Upload preview image and canvas JSON to S3 via local POST endpoint (bypasses browser CORS)
+        const response = await fetch('/api/upload/auto-save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            key: imageKey,
-            contentType: 'image/jpeg',
+            imageBase64: previewUrl,
+            canvasJson: canvasData,
+            imageKey,
+            jsonKey,
           }),
         });
 
-        if (!imgPresignedRes.ok) {
-          throw new Error('Failed to get pre-signed URL for image upload');
-        }
-
-        const { uploadUrl: imgUploadUrl } = await imgPresignedRes.json() as { uploadUrl: string };
-
-        // 2. Upload image blob directly to S3 via pre-signed URL
-        const imgUploadRes = await fetch(imgUploadUrl, {
-          method: 'PUT',
-          body: imageBlob,
-          headers: {
-            'Content-Type': 'image/jpeg',
-          },
-        });
-
-        if (!imgUploadRes.ok) {
-          throw new Error('Failed to upload image to S3');
-        }
-
-        // 3. Get pre-signed URL for JSON canvas data
-        const jsonPresignedRes = await fetch('/api/upload/s3-presigned', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            key: jsonKey,
-            contentType: 'application/json',
-          }),
-        });
-
-        if (jsonPresignedRes.ok) {
-          const { uploadUrl: jsonUploadUrl } = await jsonPresignedRes.json() as { uploadUrl: string };
-          
-          // Upload JSON text directly to S3
-          await fetch(jsonUploadUrl, {
-            method: 'PUT',
-            body: canvasData,
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          });
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(`Auto-save proxy upload failed: ${errText}`);
         }
 
         console.log(`[S3 Auto-Save] Background upload successful for design ${activeSleeveId}`);
