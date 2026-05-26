@@ -12,7 +12,6 @@ import {
 import { Canvas, IText, FabricImage, Rect, filters } from 'fabric';
 import { cn } from '@/lib/utils';
 import TextCanvasToolbar from '@/components/Editor/TextCanvasToolbar';
-import { Redo2, Undo2 } from 'lucide-react';
 import {
   designHasUserPhoto,
   shouldBlockNextImageUpload,
@@ -131,6 +130,41 @@ function canvasJsonHasUserPhoto(json: string): boolean {
 
 function removeUserLayerImages(cvs: Canvas) {
   cvs.getObjects().filter(isUserLayerImage).forEach((obj) => cvs.remove(obj));
+}
+
+/**
+ * Re-applies all non-serialized lock, scaling, and eventing properties
+ * to the frame and user layers after standard loadFromJSON runs.
+ */
+function restoreLockedProperties(cvs: Canvas) {
+  cvs.getObjects().forEach((obj) => {
+    if ((obj as any).isFrame) {
+      obj.set({
+        selectable: true,
+        evented: true,
+        lockMovementX: true,
+        lockMovementY: true,
+        lockScalingX: true,
+        lockScalingY: true,
+        lockRotation: true,
+        hasControls: false,
+        hasBorders: true,
+        perPixelTargetFind: true, // Click-through transparent center to select image behind
+        hoverCursor: 'default',
+      });
+    } else if (isUserLayerImage(obj)) {
+      obj.set({
+        selectable: true,
+        evented: true,
+        hasControls: false,
+        hasBorders: false,
+        lockScalingX: true,
+        lockScalingY: true,
+        lockRotation: true,
+        hoverCursor: 'move',
+      });
+    }
+  });
 }
 
 function applyCoverLayout(img: FabricImage, cvsHeight: number) {
@@ -437,6 +471,7 @@ export default function CanvasEditor() {
       try {
         await cvs.loadFromJSON(JSON.parse(json));
         if (fabricCanvas.current !== cvs) return;
+        restoreLockedProperties(cvs);
         reapplyLoadedImageFilters(cvs);
         cvs.renderAll();
         const restoreKey = latestCanvasKeyRef.current;
@@ -1103,6 +1138,7 @@ export default function CanvasEditor() {
         if (fabricCanvas.current !== canvas) return;
         const sid = latestSleeveIdRef.current;
         const designSnap = sid ? useStore.getState().sleeves.find((s) => s.id === sid) : undefined;
+        restoreLockedProperties(canvas);
         applyDesignPhotoFiltersToCanvas(canvas, designSnap);
         canvas.renderAll();
 
@@ -1141,6 +1177,120 @@ export default function CanvasEditor() {
     }
   }, [activeSleeveId, activeSleeveCopyId, setActiveObjectType, setPhotoAdjustments]); // We omit sleeves from deps to prevent infinite loops
 
+  // Background S3 upload effect
+  const lastUploadedJsonRef = useRef<string>('');
+  const isUploadingS3Ref = useRef<boolean>(false);
+
+  useEffect(() => {
+    if (!activeSleeveId) return;
+
+    const design = sleeves.find((s) => s.id === activeSleeveId);
+    if (!design) return;
+
+    const copy = design.sleeveCopies?.find((c) => c.id === activeSleeveCopyId);
+    const canvasData = copy?.canvasData ?? design.canvasData;
+    const previewUrl = copy?.previewUrl ?? design.previewUrl;
+
+    if (!canvasData || !previewUrl) return;
+
+    // Only upload if the canvas JSON has changed
+    if (canvasData === lastUploadedJsonRef.current) return;
+
+    const purchaseId = useStore.getState().purchaseId;
+    if (!purchaseId) return;
+
+    const timer = setTimeout(async () => {
+      // Avoid double-uploading same data
+      if (canvasData === lastUploadedJsonRef.current || isUploadingS3Ref.current) return;
+
+      isUploadingS3Ref.current = true;
+      try {
+        console.log(`[S3 Auto-Save] Triggering background upload for design ${activeSleeveId}...`);
+        
+        // Define S3 predefined path/keys
+        const suffix = activeSleeveCopyId ? `_${activeSleeveCopyId}` : '';
+        const imageKey = `designs/${purchaseId}/${activeSleeveId}${suffix}_preview.jpg`;
+        const jsonKey = `designs/${purchaseId}/${activeSleeveId}${suffix}_canvas.json`;
+
+        // Convert base64 dataURL to binary Blob
+        const dataUrlToBlob = (dataUrlStr: string) => {
+          const match = /^data:([^;,]+)(;base64)?,(.*)$/.exec(dataUrlStr);
+          if (!match) throw new Error('Invalid data URL');
+          const mime = match[1] || 'application/octet-stream';
+          const isBase64 = !!match[2];
+          const data = match[3] || '';
+          const bytes = isBase64
+            ? Uint8Array.from(atob(data), (c) => c.charCodeAt(0))
+            : new TextEncoder().encode(decodeURIComponent(data));
+          return new Blob([bytes], { type: mime });
+        };
+
+        const imageBlob = dataUrlToBlob(previewUrl);
+
+        // 1. Get pre-signed S3 URL for JPEG preview image
+        const imgPresignedRes = await fetch('/api/upload/s3-presigned', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            key: imageKey,
+            contentType: 'image/jpeg',
+          }),
+        });
+
+        if (!imgPresignedRes.ok) {
+          throw new Error('Failed to get pre-signed URL for image upload');
+        }
+
+        const { uploadUrl: imgUploadUrl } = await imgPresignedRes.json() as { uploadUrl: string };
+
+        // 2. Upload image blob directly to S3 via pre-signed URL
+        const imgUploadRes = await fetch(imgUploadUrl, {
+          method: 'PUT',
+          body: imageBlob,
+          headers: {
+            'Content-Type': 'image/jpeg',
+          },
+        });
+
+        if (!imgUploadRes.ok) {
+          throw new Error('Failed to upload image to S3');
+        }
+
+        // 3. Get pre-signed URL for JSON canvas data
+        const jsonPresignedRes = await fetch('/api/upload/s3-presigned', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            key: jsonKey,
+            contentType: 'application/json',
+          }),
+        });
+
+        if (jsonPresignedRes.ok) {
+          const { uploadUrl: jsonUploadUrl } = await jsonPresignedRes.json() as { uploadUrl: string };
+          
+          // Upload JSON text directly to S3
+          await fetch(jsonUploadUrl, {
+            method: 'PUT',
+            body: canvasData,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          });
+        }
+
+        console.log(`[S3 Auto-Save] Background upload successful for design ${activeSleeveId}`);
+        lastUploadedJsonRef.current = canvasData;
+      } catch (err) {
+        console.error('[S3 Auto-Save] Error uploading in background:', err);
+      } finally {
+        isUploadingS3Ref.current = false;
+      }
+    }, 3000); // 3-second debounce
+
+    return () => clearTimeout(timer);
+  }, [activeSleeveId, activeSleeveCopyId, sleeves]);
+
   const FONT_FAMILIES = [
     'Inter',
     'Outfit',
@@ -1155,28 +1305,7 @@ export default function CanvasEditor() {
   ];
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col items-center justify-start overflow-hidden bg-[#2b2b2b] px-2 pt-2 pb-1 lg:justify-center lg:overflow-auto lg:p-6 lg:pt-8">
-      <div className="mb-1.5 flex shrink-0 items-center justify-center gap-1.5 lg:mb-6 lg:gap-2">
-        <button
-          type="button"
-          onClick={() => dispatchCanvasAction({ type: 'UNDO' })}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-black/30 text-muted-foreground transition-colors hover:bg-black/40 hover:text-foreground lg:h-10 lg:w-10 lg:rounded-xl"
-          title="Undo edits (stops after your photo is on the canvas)"
-          aria-label="Undo edits"
-        >
-          <Undo2 size={18} />
-        </button>
-        <button
-          type="button"
-          onClick={() => dispatchCanvasAction({ type: 'REDO' })}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-black/30 text-muted-foreground transition-colors hover:bg-black/40 hover:text-foreground lg:h-10 lg:w-10 lg:rounded-xl"
-          title="Redo (Ctrl/Cmd+Shift+Z)"
-          aria-label="Redo"
-        >
-          <Redo2 size={18} />
-        </button>
-      </div>
-
+    <div className="flex h-full min-h-0 w-full flex-col items-center justify-start overflow-hidden bg-[#2b2b2b] px-2 pt-5 pb-2 lg:justify-center lg:overflow-auto lg:p-6 lg:pt-5">
       <div className="w-full shrink-0">
         <TextCanvasToolbar />
       </div>
@@ -1187,7 +1316,7 @@ export default function CanvasEditor() {
         untouched. Fabric maps pointer events through getBoundingClientRect()
         so a CSS transform doesn't break hit testing.
       */}
-      <div className="flex w-full min-h-0 flex-1 flex-col items-center justify-center lg:flex-none lg:justify-start lg:pt-2">
+      <div className="flex w-full min-h-0 flex-1 flex-col items-center justify-center lg:flex-none lg:justify-center lg:pt-8">
         <FluidCanvasFrame width={CANVAS_WIDTH} height={currentHeight}>
           <div className="relative overflow-hidden bg-black shadow-[0_0_50px_rgba(0,0,0,0.8)] ring-1 ring-white/10">
             <canvas ref={canvasRef} style={{ touchAction: 'none' }} />

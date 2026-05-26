@@ -9,9 +9,10 @@ import EditorSidebar from '@/components/Editor/EditorSidebar';
 import EditorSubPanel from '@/components/Editor/EditorSubPanel';
 import MobileEditorLayout from '@/components/Mobile/MobileEditorLayout';
 
-import { ShoppingCart } from 'lucide-react';
+import { ShoppingCart, Undo2, Redo2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { orderMeetsPackRequirements } from '@/lib/packOrder';
+import { dispatchCanvasAction } from '@/lib/events';
 
 export default function Home() {
   const router = useRouter();
@@ -48,6 +49,29 @@ export default function Home() {
             className="h-9 sm:h-12 w-auto object-contain invert mix-blend-screen opacity-90"
           />
         </div>
+
+        {activeSleeveId && (
+          <div className="flex items-center gap-1 bg-black/25 p-1 rounded-lg border border-white/5 shadow-inner">
+            <button
+              type="button"
+              onClick={() => dispatchCanvasAction({ type: 'UNDO' })}
+              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground active:scale-95"
+              title="Undo"
+              aria-label="Undo"
+            >
+              <Undo2 size={18} />
+            </button>
+            <button
+              type="button"
+              onClick={() => dispatchCanvasAction({ type: 'REDO' })}
+              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground active:scale-95"
+              title="Redo"
+              aria-label="Redo"
+            >
+              <Redo2 size={18} />
+            </button>
+          </div>
+        )}
 
         <div className="flex items-center gap-3 sm:gap-6 min-w-0">
           <span className="hidden sm:inline text-sm text-muted-foreground font-mono truncate">

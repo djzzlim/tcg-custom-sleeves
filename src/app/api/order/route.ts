@@ -38,8 +38,25 @@ function uint8ToBase64(bytes: Uint8Array): string {
  * Resolve a design that referenced `uploadId` (chunked upload) into the
  * legacy `dataUrl` shape so the downstream Apps Script webhook keeps working.
  */
-function resolveDesign(d: IncomingDesign): OutgoingDesign {
+async function resolveDesign(d: IncomingDesign): Promise<OutgoingDesign> {
   if (d.uploadId) {
+    // If the uploadId is an S3 key, resolve it to its public S3 URL directly (bypassing Google Drive/base64 upload)
+    if (d.uploadId.startsWith('designs/')) {
+      const { bucketName } = await import('@/lib/s3');
+      const endpoint = process.env.S3_ENDPOINT || 'https://s3.cardcollectionstudio.shop';
+      const fileUrl = `${endpoint}/${bucketName}/${d.uploadId}`;
+      console.log(`[Order API] Resolved S3 design URL: ${fileUrl}`);
+      return {
+        name: d.name,
+        quantity: d.quantity,
+        sleeveType: d.sleeveType,
+        packName: d.packName,
+        packSize: d.packSize,
+        dataUrl: fileUrl, // Directly send the public S3 URL to Google Sheets!
+      };
+    }
+
+    // Fallback/Legacy: retrieve from in-memory uploadStore
     const entry = takeAssembled(d.uploadId);
     if (!entry || !entry.assembled) {
       throw new Error(`Upload ${d.uploadId} was not finalized or already consumed.`);
@@ -90,7 +107,7 @@ export async function POST(request: Request) {
       throw new Error('GOOGLE_SHEETS_WEBHOOK_URL is not configured');
     }
 
-    const resolvedDesigns = designs.map(resolveDesign);
+    const resolvedDesigns = await Promise.all(designs.map(resolveDesign));
 
     const res = await fetch(webhookUrl, {
       method: 'POST',

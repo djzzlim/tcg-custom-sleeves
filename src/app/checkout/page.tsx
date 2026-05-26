@@ -17,7 +17,6 @@ import {
 } from '@/lib/packOrder';
 import type { Pack, SleeveDesign } from '@/store/useStore';
 import {
-  uploadBlobInChunks,
   dataUrlToBlob,
   MAX_OUTPUT_BYTES,
 } from '@/lib/chunkedUpload';
@@ -88,7 +87,11 @@ export default function CheckoutPage() {
               label: `Rendering "${copyName}" (${pack.name})`,
             });
             const height = pack.sleeveType === 'Japanese' ? 575 : 560;
-            const highResDataUrl = await exportDesignToHighRes(canvasData, {
+            let format: 'png' | 'jpeg' = 'png';
+            let mimeType = 'image/png';
+            let s3Key = `designs/${purchaseId}/${design.id}_${copy.id}_highres.png`;
+
+            let highResDataUrl = await exportDesignToHighRes(canvasData, {
               height,
               multiplier: 4,
               format: 'png',
@@ -96,36 +99,77 @@ export default function CheckoutPage() {
                 ? { imageAdjustments: design.imageAdjustments }
                 : {}),
             });
-            const blob = dataUrlToBlob(highResDataUrl);
+            let blob = dataUrlToBlob(highResDataUrl);
+
+            // Dynamic compression fallback if lossless PNG exceeds 50MB budget
+            if (blob.size > MAX_OUTPUT_BYTES) {
+              console.log(`[Checkout] Lossless PNG is ${(blob.size / 1024 / 1024).toFixed(1)} MB (exceeds 50MB limit). Re-exporting as high-quality JPEG (quality: 0.95)...`);
+              highResDataUrl = await exportDesignToHighRes(canvasData, {
+                height,
+                multiplier: 4,
+                format: 'jpeg',
+                jpegQuality: 0.95, // Near-lossless, extremely high print quality
+                ...(design.imageAdjustments !== undefined
+                  ? { imageAdjustments: design.imageAdjustments }
+                  : {}),
+              });
+              blob = dataUrlToBlob(highResDataUrl);
+              format = 'jpeg';
+              mimeType = 'image/jpeg';
+              s3Key = `designs/${purchaseId}/${design.id}_${copy.id}_highres.jpg`;
+            }
+
             if (blob.size > MAX_OUTPUT_BYTES) {
               throw new Error(
-                `"${copyName}" exports to ${(blob.size / 1024 / 1024).toFixed(1)} MB which exceeds the ${MAX_OUTPUT_BYTES / 1024 / 1024} MB output limit. Try simplifying the design.`
+                `"${copyName}" is extremely complex and exceeds the ${MAX_OUTPUT_BYTES / 1024 / 1024} MB print output limit. Please try simplifying your canvas elements.`
               );
             }
+
             setStatus('uploading');
             setUploadInfo({
               done: processed - 1,
               total: totalDesigns,
               label: `Uploading "${copyName}" (${(blob.size / 1024 / 1024).toFixed(1)} MB)`,
             });
-            const filename = `${purchaseId}-${pack.name.replace(/\s+/g, '_')}-${copyName.replace(/\s+/g, '_')}.png`;
-            const { uploadId, size } = await uploadBlobInChunks(blob, filename, {
-              onProgress: ({ bytesUploaded, totalBytes }) => {
-                setUploadInfo({
-                  done: processed - 1,
-                  total: totalDesigns,
-                  label: `Uploading "${copyName}" (${(bytesUploaded / 1024 / 1024).toFixed(1)} / ${(totalBytes / 1024 / 1024).toFixed(1)} MB)`,
-                });
+
+            // Request S3 pre-signed upload URL for high-res design from the backend API
+            const presignedRes = await fetch('/api/upload/s3-presigned', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                key: s3Key,
+                contentType: mimeType,
+              }),
+            });
+
+            if (!presignedRes.ok) {
+              const text = await presignedRes.text();
+              throw new Error(`Failed to get S3 pre-signed upload URL: ${text}`);
+            }
+
+            const { uploadUrl } = (await presignedRes.json()) as { uploadUrl: string };
+
+            // Upload the high-res file directly to Garage S3 in the background
+            const uploadRes = await fetch(uploadUrl, {
+              method: 'PUT',
+              body: blob,
+              headers: {
+                'Content-Type': mimeType,
               },
             });
+
+            if (!uploadRes.ok) {
+              throw new Error(`S3 high-res upload failed for "${copyName}"`);
+            }
+
             designPayloads.push({
               packName: pack.name,
               packSize: pack.size,
               sleeveType: pack.sleeveType,
               name: copyName,
-              uploadId,
-              mimeType: 'image/png',
-              size,
+              uploadId: s3Key, // Pass S3 key as reference
+              mimeType,
+              size: blob.size,
               quantity: 1,
             });
           }

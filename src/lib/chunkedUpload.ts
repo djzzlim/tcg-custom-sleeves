@@ -9,7 +9,7 @@
  */
 
 export const UPLOAD_CHUNK_SIZE = 4 * 1024 * 1024;
-export const MAX_OUTPUT_BYTES = 25 * 1024 * 1024;
+export const MAX_OUTPUT_BYTES = 50 * 1024 * 1024;
 const MAX_ATTEMPTS_PER_CHUNK = 4;
 const BACKOFF_BASE_MS = 500;
 
