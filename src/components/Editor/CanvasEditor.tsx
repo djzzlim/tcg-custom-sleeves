@@ -345,7 +345,7 @@ export default function CanvasEditor({ isMobileView = false }: { isMobileView?: 
         if (cachedJson && canvasHasUserPhoto(cachedJson)) {
           json = cachedJson;
           previewUrl = existingPreview ?? canvas.toDataURL({ format: 'jpeg', quality: 0.8, multiplier: 1 });
-        } else if (canvasHasUserPhoto(existingCanvas) && existingPreview) {
+        } else if (existingCanvas && canvasHasUserPhoto(existingCanvas) && existingPreview) {
           json = existingCanvas;
           previewUrl = existingPreview;
         } else {
