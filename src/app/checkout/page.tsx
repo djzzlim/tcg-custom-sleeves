@@ -4,8 +4,8 @@ import { useStore } from '@/store/useStore';
 import { useRouter } from 'next/navigation';
 import { ChevronDown, ChevronLeft, CreditCard, Loader2 } from 'lucide-react';
 import DesignQuantityStepper from '@/components/shared/DesignQuantityStepper';
-import { useEffect, useState } from 'react';
-import { exportDesignToHighRes } from '@/lib/export';
+import { useEffect, useRef, useState } from 'react';
+import { resolveDesignHighResUpload, designHighResMatchesCanvas } from '@/lib/designS3Upload';
 import {
   orderMeetsPackRequirements,
   designsInPack,
@@ -16,10 +16,6 @@ import {
   maxQuantityForDesignInPack,
 } from '@/lib/packOrder';
 import type { Pack, SleeveDesign } from '@/store/useStore';
-import {
-  dataUrlToBlob,
-  MAX_OUTPUT_BYTES,
-} from '@/lib/chunkedUpload';
 import { appAlert } from '@/lib/appDialog';
 import { cn } from '@/lib/utils';
 
@@ -36,9 +32,16 @@ export default function CheckoutPage() {
 
   const [status, setStatus] = useState<'idle' | 'exporting' | 'uploading' | 'success' | 'error'>('idle');
   const [uploadInfo, setUploadInfo] = useState<{ done: number; total: number; label: string } | null>(null);
+  const isSubmittingRef = useRef(false);
+
+  const isCheckoutLocked =
+    status === 'exporting' || status === 'uploading' || status === 'success';
 
   const handleProceedToPayment = async () => {
+    if (isSubmittingRef.current || status === 'success') return;
     if (sleeves.length === 0) return;
+
+    isSubmittingRef.current = true;
     setStatus('exporting');
 
     try {
@@ -48,6 +51,7 @@ export default function CheckoutPage() {
           title: 'Order not ready',
           message: packCheck.message,
         });
+        isSubmittingRef.current = false;
         setStatus('idle');
         return;
       }
@@ -63,120 +67,67 @@ export default function CheckoutPage() {
         quantity: number;
       }> = [];
 
-      const totalDesigns = sleeves.reduce((sum, design) => (
-        sum + sleeveCopiesForDesign(design).length
-      ), 0);
-      let processed = 0;
+      const packDesignCount = packs.reduce(
+        (sum, pack) => sum + designsInPack(sleeves, pack.id).length,
+        0
+      );
+      let processedDesigns = 0;
+      const highResByDesignId = new Map<
+        string,
+        { uploadId: string; mimeType: string; size: number }
+      >();
 
       for (const pack of packs) {
         const packDesigns = designsInPack(sleeves, pack.id);
         for (const design of packDesigns) {
           const copies = sleeveCopiesForDesign(design);
-          for (const [copyIndex, copy] of copies.entries()) {
-            processed += 1;
-            const copyName = copies.length > 1
-              ? `${design.name} - Sleeve ${copyIndex + 1}`
-              : design.name;
-            const canvasData = sleeveCopyCanvasData(design, copy);
-            if (!canvasData) {
-              throw new Error(`"${copyName}" in "${pack.name}" is missing artwork.`);
-            }
-            setUploadInfo({
-              done: processed - 1,
-              total: totalDesigns,
-              label: `Rendering "${copyName}" (${pack.name})`,
-            });
-            const height = pack.sleeveType === 'Japanese' ? 575 : 560;
-            let format: 'png' | 'jpeg' = 'png';
-            let mimeType = 'image/png';
-            let s3Key = `designs/${purchaseId}/${design.id}_${copy.id}_highres.png`;
-
-            let highResDataUrl = await exportDesignToHighRes(canvasData, {
-              height,
-              multiplier: 4,
-              format: 'png',
-              ...(design.imageAdjustments !== undefined
-                ? { imageAdjustments: design.imageAdjustments }
-                : {}),
-            });
-            let blob = dataUrlToBlob(highResDataUrl);
-
-            // Dynamic compression fallback if lossless PNG exceeds 50MB budget
-            if (blob.size > MAX_OUTPUT_BYTES) {
-              console.log(`[Checkout] Lossless PNG is ${(blob.size / 1024 / 1024).toFixed(1)} MB (exceeds 50MB limit). Re-exporting as high-quality JPEG (quality: 0.95)...`);
-              highResDataUrl = await exportDesignToHighRes(canvasData, {
-                height,
-                multiplier: 4,
-                format: 'jpeg',
-                jpegQuality: 0.95, // Near-lossless, extremely high print quality
-                ...(design.imageAdjustments !== undefined
-                  ? { imageAdjustments: design.imageAdjustments }
-                  : {}),
-              });
-              blob = dataUrlToBlob(highResDataUrl);
-              format = 'jpeg';
-              mimeType = 'image/jpeg';
-              s3Key = `designs/${purchaseId}/${design.id}_${copy.id}_highres.jpg`;
-            }
-
-            if (blob.size > MAX_OUTPUT_BYTES) {
-              throw new Error(
-                `"${copyName}" is extremely complex and exceeds the ${MAX_OUTPUT_BYTES / 1024 / 1024} MB print output limit. Please try simplifying your canvas elements.`
-              );
-            }
-
-            setStatus('uploading');
-            setUploadInfo({
-              done: processed - 1,
-              total: totalDesigns,
-              label: `Uploading "${copyName}" (${(blob.size / 1024 / 1024).toFixed(1)} MB)`,
-            });
-
-            // Request S3 pre-signed upload URL for high-res design from the backend API
-            const presignedRes = await fetch('/api/upload/s3-presigned', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                key: s3Key,
-                contentType: mimeType,
-              }),
-            });
-
-            if (!presignedRes.ok) {
-              const text = await presignedRes.text();
-              throw new Error(`Failed to get S3 pre-signed upload URL: ${text}`);
-            }
-
-            const { uploadUrl } = (await presignedRes.json()) as { uploadUrl: string };
-
-            // Upload the high-res file directly to Garage S3 in the background
-            const uploadRes = await fetch(uploadUrl, {
-              method: 'PUT',
-              body: blob,
-              headers: {
-                'Content-Type': mimeType,
-              },
-            });
-
-            if (!uploadRes.ok) {
-              throw new Error(`S3 high-res upload failed for "${copyName}"`);
-            }
-
-            designPayloads.push({
-              packName: pack.name,
-              packSize: pack.size,
-              sleeveType: pack.sleeveType,
-              name: copyName,
-              uploadId: s3Key, // Pass S3 key as reference
-              mimeType,
-              size: blob.size,
-              quantity: 1,
-            });
+          const canvasData =
+            design.canvasData ?? sleeveCopyCanvasData(design, copies[0]);
+          if (!canvasData) {
+            throw new Error(`"${design.name}" in "${pack.name}" is missing artwork.`);
           }
+
+          if (!highResByDesignId.has(design.id)) {
+            const freshDesign =
+              useStore.getState().sleeves.find((s) => s.id === design.id) ?? design;
+
+            if (!designHighResMatchesCanvas(freshDesign, canvasData)) {
+              setUploadInfo({
+                done: processedDesigns,
+                total: packDesignCount,
+                label: `Uploading HD "${freshDesign.name}" (${pack.name})…`,
+              });
+              setStatus('uploading');
+            }
+
+            const highRes = await resolveDesignHighResUpload({
+              purchaseId,
+              design: freshDesign,
+              canvasData,
+              sleeveType: pack.sleeveType,
+            });
+            highResByDesignId.set(design.id, highRes);
+          }
+
+          const highRes = highResByDesignId.get(design.id)!;
+          const sleeveQty = design.quantity ?? copies.length;
+
+          // One Sheet row per design (qty 65 = one row with quantity 65, not 65 duplicate rows).
+          designPayloads.push({
+            packName: pack.name,
+            packSize: pack.size,
+            sleeveType: pack.sleeveType,
+            name: design.name,
+            uploadId: highRes.uploadId,
+            mimeType: highRes.mimeType,
+            size: highRes.size,
+            quantity: sleeveQty,
+          });
+          processedDesigns += 1;
         }
       }
 
-      setUploadInfo({ done: totalDesigns, total: totalDesigns, label: 'Finalizing order…' });
+      setUploadInfo({ done: packDesignCount, total: packDesignCount, label: 'Finalizing order…' });
       setStatus('uploading');
       const res = await fetch('/api/order', {
         method: 'POST',
@@ -200,6 +151,7 @@ export default function CheckoutPage() {
     } catch (e: unknown) {
       console.error('Checkout error', e);
       const message = e instanceof Error ? e.message : 'Unknown checkout error';
+      isSubmittingRef.current = false;
       setStatus('error');
       setUploadInfo(null);
       await appAlert({
@@ -418,25 +370,25 @@ export default function CheckoutPage() {
             )}
 
             <button
-              className="w-full py-4 bg-primary text-black font-bold uppercase tracking-wider rounded flex items-center justify-center gap-2 hover:brightness-110 transition-all disabled:opacity-50"
+              type="button"
+              className="w-full py-4 bg-primary text-black font-bold uppercase tracking-wider rounded flex items-center justify-center gap-2 hover:brightness-110 transition-all disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed"
               onClick={handleProceedToPayment}
-              disabled={
-                status === 'exporting' ||
-                status === 'uploading' ||
-                sleeves.length === 0 ||
-                !packCheck.ok
-              }
+              disabled={isCheckoutLocked || sleeves.length === 0 || !packCheck.ok}
+              aria-disabled={isCheckoutLocked || sleeves.length === 0 || !packCheck.ok}
             >
-              {(status === 'exporting' || status === 'uploading') ? (
+              {status === 'exporting' || status === 'uploading' ? (
                 <Loader2 size={20} className="animate-spin" />
               ) : (
                 <CreditCard size={20} />
               )}
 
-              {(status === 'exporting' || status === 'uploading') ? 'Please wait...' :
-               status === 'success' ? 'Order Placed!' :
-               status === 'error' ? 'Retry Checkout' :
-               'Proceed to Payment'}
+              {status === 'exporting' || status === 'uploading'
+                ? 'Please wait...'
+                : status === 'success'
+                  ? 'Order Placed'
+                  : status === 'error'
+                    ? 'Retry Checkout'
+                    : 'Proceed to Payment'}
             </button>
 
             <p className="text-center text-xs text-muted-foreground mt-4">

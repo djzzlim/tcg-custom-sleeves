@@ -108,6 +108,9 @@ export async function POST(request: Request) {
     }
 
     const resolvedDesigns = await Promise.all(designs.map(resolveDesign));
+    console.log(
+      `[Order API] Posting ${resolvedDesigns.length} design row(s) to Apps Script for ${purchaseId}`
+    );
 
     const res = await fetch(webhookUrl, {
       method: 'POST',
@@ -118,18 +121,24 @@ export async function POST(request: Request) {
         designs: resolvedDesigns,
         status: 'Unpaid',
       }),
+      redirect: 'follow',
     });
 
     const resultText = await res.text();
     let result;
     try {
       result = JSON.parse(resultText);
-    } catch (e) {
+    } catch {
+      const isAccessDenied = resultText.includes('Access denied');
       console.error(
         '[Order API] Failed to parse Apps Script response as JSON. Raw response:',
         resultText.substring(0, 500)
       );
-      throw new Error('Apps Script returned HTML instead of JSON. Check your Web App URL and permissions.');
+      throw new Error(
+        isAccessDenied
+          ? 'Google Apps Script web app returned "Access denied". Redeploy the script as Web app: Execute as Me + Anyone with the link can access, then update GOOGLE_SHEETS_WEBHOOK_URL in .env.local.'
+          : 'Apps Script returned HTML instead of JSON. Check your Web App URL and deployment permissions.'
+      );
     }
 
     if (!result.success) {

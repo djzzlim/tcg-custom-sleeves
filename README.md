@@ -65,6 +65,10 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-## Future Integration
+## Order logging (Google Sheets)
 
-- **Order Processing:** The `src/app/api/checkout/route.ts` endpoint acts as a skeleton for pushing final designs to Shopify / Google Sheets via webhooks when a user checks out.
+Checkout posts orders to a **Google Apps Script Web App** (`GOOGLE_SHEETS_WEBHOOK_URL`). You can set this up with your personal Google while developing; the company repeats the same steps with their account for production.
+
+**Full setup and handoff guide:** [docs/google-sheets-setup.md](docs/google-sheets-setup.md)
+
+**Apps Script to paste:** [apps-script/fulfillment-webhook.gs](apps-script/fulfillment-webhook.gs)

@@ -34,6 +34,12 @@ export interface SleeveDesign {
   sleeveCopies?: SleeveCopy[];
   /** Shared photo filters for every sleeve in this design (not per-copy). */
   imageAdjustments?: ImageAdjustments;
+  /** S3 key for print-ready upload (flushed when switching designs). */
+  highResS3Key?: string;
+  highResMimeType?: string;
+  highResSize?: number;
+  /** Canvas JSON that was last uploaded as high-res (skip re-upload when unchanged). */
+  highResCanvasData?: string;
 }
 
 function createSleeveCopies(quantity: number, seed?: SleeveCopy[]): SleeveCopy[] {
