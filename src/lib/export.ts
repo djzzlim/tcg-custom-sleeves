@@ -1,4 +1,7 @@
-import { Canvas, FabricImage } from 'fabric';
+import { Canvas, FabricImage, FabricObject } from 'fabric';
+
+// Register custom properties globally on FabricObject so they serialize and deserialize correctly
+FabricObject.customProperties = ['isFrame', 'customColor', 'imageAdjustments'];
 import {
   buildImageFilters,
   DEFAULT_IMAGE_ADJUSTMENTS,

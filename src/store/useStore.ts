@@ -269,7 +269,11 @@ export const useStore = create<AppState>((set) => ({
         const nextCopies = copies.map((copy) =>
           copy.id === copyId ? { ...copy, ...data } : copy
         );
-        const seedDesignCanvas = !s.canvasData && data.canvasData && data.previewUrl;
+        const isSingleCopy = nextCopies.length <= 1;
+        const seedDesignCanvas =
+          (isSingleCopy || !s.canvasData) &&
+          typeof data.canvasData === 'string' &&
+          typeof data.previewUrl === 'string';
         return {
           ...s,
           ...(seedDesignCanvas

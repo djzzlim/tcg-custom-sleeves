@@ -9,10 +9,14 @@ import {
   mergeImageAdjustments,
   type ImageAdjustments,
 } from '@/lib/imageAdjustments';
-import { Canvas, IText, FabricImage, Rect, filters } from 'fabric';
+import { Canvas, IText, FabricImage, Rect, filters, FabricObject } from 'fabric';
+
+// Register custom properties globally on FabricObject so they serialize and deserialize correctly
+FabricObject.customProperties = ['isFrame', 'customColor', 'imageAdjustments'];
 import { cn } from '@/lib/utils';
 import TextCanvasToolbar from '@/components/Editor/TextCanvasToolbar';
 import {
+  canvasHasFrame,
   canvasHasUserPhoto,
   designHasUserPhoto,
   shouldBlockNextImageUpload,
@@ -342,10 +346,10 @@ export default function CanvasEditor({ isMobileView = false }: { isMobileView?: 
         const cachedJson = lastSavedJsonByKeyRef.current.get(
           `${designId}:${copyId ?? 'design'}`
         );
-        if (cachedJson && canvasHasUserPhoto(cachedJson)) {
+        if (cachedJson && (canvasHasUserPhoto(cachedJson) || canvasHasFrame(cachedJson))) {
           json = cachedJson;
           previewUrl = existingPreview ?? canvas.toDataURL({ format: 'jpeg', quality: 0.8, multiplier: 1 });
-        } else if (existingCanvas && canvasHasUserPhoto(existingCanvas) && existingPreview) {
+        } else if (existingCanvas && (canvasHasUserPhoto(existingCanvas) || canvasHasFrame(existingCanvas)) && existingPreview) {
           json = existingCanvas;
           previewUrl = existingPreview;
         } else {
@@ -355,8 +359,8 @@ export default function CanvasEditor({ isMobileView = false }: { isMobileView?: 
         json = JSON.stringify(canvas.toObject([...CANVAS_JSON_PROPS]));
         previewUrl = canvas.toDataURL({ format: 'jpeg', quality: 0.8, multiplier: 1 });
         if (
-          !canvasJsonHasUserPhoto(json) &&
-          canvasHasUserPhoto(existingCanvas) &&
+          ((!canvasJsonHasUserPhoto(json) && canvasHasUserPhoto(existingCanvas)) ||
+           (!canvasHasFrame(json) && canvasHasFrame(existingCanvas))) &&
           existingPreview
         ) {
           return;
@@ -506,6 +510,7 @@ export default function CanvasEditor({ isMobileView = false }: { isMobileView?: 
       const json = JSON.stringify(fabricCanvas.current.toObject([...CANVAS_JSON_PROPS]));
       const dataUrl = fabricCanvas.current.toDataURL({ format: 'jpeg', quality: 0.8, multiplier: 1 });
       const currentCopyId = latestSleeveCopyIdRef.current;
+      setLastSavedJson(latestCanvasKeyRef.current, json);
       if (currentCopyId) {
         updateSleeveCopy(currentId, currentCopyId, { canvasData: json, previewUrl: dataUrl });
       } else {
@@ -1229,8 +1234,8 @@ export default function CanvasEditor({ isMobileView = false }: { isMobileView?: 
         const json = JSON.stringify(canvas.toObject([...CANVAS_JSON_PROPS]));
         const existingCanvas = canvasData;
         if (
-          !canvasJsonHasUserPhoto(json) &&
-          canvasHasUserPhoto(existingCanvas)
+          (!canvasJsonHasUserPhoto(json) && canvasHasUserPhoto(existingCanvas)) ||
+          (!canvasHasFrame(json) && canvasHasFrame(existingCanvas))
         ) {
           setTimeout(() => {
             if (canvasLoadGenerationRef.current === loadGeneration) {

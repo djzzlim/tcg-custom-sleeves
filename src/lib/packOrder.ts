@@ -42,6 +42,23 @@ export function canvasHasUserPhoto(canvasData: string | undefined): boolean {
   }
 }
 
+/** Whether the canvas has a frame applied. */
+export function canvasHasFrame(canvasData: string | undefined): boolean {
+  if (!canvasData) return false;
+  try {
+    const parsed = JSON.parse(canvasData) as { objects?: unknown[] };
+    const objs = parsed.objects;
+    if (!Array.isArray(objs)) return false;
+    return objs.some((obj) => {
+      if (!obj || typeof obj !== 'object') return false;
+      const any = obj as { isFrame?: boolean };
+      return Boolean(any.isFrame);
+    });
+  } catch {
+    return false;
+  }
+}
+
 /** Whether the active design already has a user photo (re-upload replaces, not adds). */
 export function designHasUserPhoto(design: SleeveDesign | undefined): boolean {
   if (!design) return false;
