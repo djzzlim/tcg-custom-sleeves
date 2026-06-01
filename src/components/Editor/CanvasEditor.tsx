@@ -1336,7 +1336,9 @@ export default function CanvasEditor({ isMobileView = false }: { isMobileView?: 
 
   // Debounced preview + JSON auto-save AND HD pre-upload while editing.
   const lastUploadedJsonByDesignRef = useRef<Map<string, string>>(new Map());
-  const s3UploadInFlightRef = useRef(false);
+  // Per-design in-flight tracking: key = "designId:copyId", value = true while uploading.
+  // A single boolean would cause design B's auto-save to be skipped while design A uploads.
+  const s3UploadInFlightByDesignRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const matchesViewport = isMobileView === window.matchMedia('(max-width: 1023px)').matches;
@@ -1346,26 +1348,53 @@ export default function CanvasEditor({ isMobileView = false }: { isMobileView?: 
     if (isLoadingRef.current) return;
 
     const designUploadKey = `${activeSleeveId}:${activeSleeveCopyId ?? 'design'}`;
-    const { canvasData, previewUrl } = activeDesignArtwork;
+    const { canvasData } = activeDesignArtwork;
 
     if (canvasData === lastUploadedJsonByDesignRef.current.get(designUploadKey)) return;
 
     const purchaseId = useStore.getState().purchaseId;
     if (!purchaseId) return;
 
+    // Capture the active design at the time the effect runs so we can abort if it changes.
+    const uploadForSleeveId = activeSleeveId;
+    const uploadForCopyId = activeSleeveCopyId;
+
     const timer = setTimeout(async () => {
       if (isLoadingRef.current) return;
+      // Abort if the user switched to a different design while the timer was pending.
+      if (
+        latestSleeveIdRef.current !== uploadForSleeveId ||
+        latestSleeveCopyIdRef.current !== uploadForCopyId
+      ) return;
       if (canvasData === lastUploadedJsonByDesignRef.current.get(designUploadKey)) return;
-      if (s3UploadInFlightRef.current) return;
+      if (s3UploadInFlightByDesignRef.current.has(designUploadKey)) return;
 
-      s3UploadInFlightRef.current = true;
+      // Yield to the browser before the heavy canvas export so the UI can render first.
+      // This prevents the 4× toDataURL from blocking a concurrent canvas.loadFromJSON.
+      await new Promise<void>((resolve) => {
+        if (typeof requestIdleCallback !== 'undefined') {
+          requestIdleCallback(() => resolve(), { timeout: 500 });
+        } else {
+          setTimeout(resolve, 0);
+        }
+      });
+
+      // Re-check after the yield — the user may have switched designs during idle.
+      if (
+        latestSleeveIdRef.current !== uploadForSleeveId ||
+        latestSleeveCopyIdRef.current !== uploadForCopyId
+      ) return;
+      if (isLoadingRef.current) return;
+      if (s3UploadInFlightByDesignRef.current.has(designUploadKey)) return;
+
+      s3UploadInFlightByDesignRef.current.add(designUploadKey);
       try {
-        console.log(`[S3 Auto-Save & HD Upload] Triggering eager background upload for design ${activeSleeveId}...`);
+        console.log(`[S3 Auto-Save & HD Upload] Triggering eager background upload for design ${uploadForSleeveId}...`);
 
         await flushDesignToS3({
           purchaseId,
-          designId: activeSleeveId,
-          copyId: activeSleeveCopyId,
+          designId: uploadForSleeveId,
+          copyId: uploadForCopyId,
           canvasData,
           sleeveType: activePack?.sleeveType ?? 'Standard',
           ...(activeSleeve?.imageAdjustments !== undefined
@@ -1373,12 +1402,12 @@ export default function CanvasEditor({ isMobileView = false }: { isMobileView?: 
             : {}),
         });
 
-        console.log(`[S3 Auto-Save & HD Upload] Eager background upload successful for design ${activeSleeveId}`);
+        console.log(`[S3 Auto-Save & HD Upload] Eager background upload successful for design ${uploadForSleeveId}`);
         lastUploadedJsonByDesignRef.current.set(designUploadKey, canvasData);
       } catch (err) {
         console.warn('[S3 Auto-Save & HD Upload] Error uploading in background:', err);
       } finally {
-        s3UploadInFlightRef.current = false;
+        s3UploadInFlightByDesignRef.current.delete(designUploadKey);
       }
     }, 1000);
 
@@ -1387,7 +1416,6 @@ export default function CanvasEditor({ isMobileView = false }: { isMobileView?: 
     activeSleeveId,
     activeSleeveCopyId,
     activeDesignArtwork?.canvasData,
-    activeDesignArtwork?.previewUrl,
     activePack?.sleeveType,
     activeSleeve?.imageAdjustments,
   ]);

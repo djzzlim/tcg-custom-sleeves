@@ -1,4 +1,4 @@
-import { exportDesignToHighRes } from '@/lib/export';
+import { exportDesignToHighResWorker } from '@/lib/workerExport';
 import { dataUrlToBlob, MAX_OUTPUT_BYTES } from '@/lib/chunkedUpload';
 import type { ImageAdjustments } from '@/lib/imageAdjustments';
 import { useStore, type SleeveDesign } from '@/store/useStore';
@@ -65,22 +65,26 @@ export async function uploadDesignHighRes(params: {
       : {}),
   };
 
-  let highResDataUrl = await exportDesignToHighRes(params.canvasData, {
+  // Export via Web Worker (OffscreenCanvas) so the main thread stays free.
+  // Falls back to the Fabric-based renderer if the worker is unavailable.
+  let exportResult = await exportDesignToHighResWorker({
+    canvasData: params.canvasData,
     ...exportOpts,
     format: 'png',
   });
-  let blob = dataUrlToBlob(highResDataUrl);
+  let blob = dataUrlToBlob(exportResult.dataUrl);
 
-  // Optimize size: if the lossless PNG exceeds 1.5MB, export it as a visually lossless 95% JPEG
-  // to shrink the file size by 80% (from 10MB to ~700KB) and make upload lightning fast!
+  // Optimize size: if the lossless PNG exceeds 1.5 MB, switch to 95 % JPEG
+  // to shrink the file by ~80 % and make upload lightning fast.
   const LARGE_PNG_LIMIT = 1.5 * 1024 * 1024;
   if (blob.size > LARGE_PNG_LIMIT) {
-    highResDataUrl = await exportDesignToHighRes(params.canvasData, {
+    exportResult = await exportDesignToHighResWorker({
+      canvasData: params.canvasData,
       ...exportOpts,
       format: 'jpeg',
       jpegQuality: 0.95,
     });
-    blob = dataUrlToBlob(highResDataUrl);
+    blob = dataUrlToBlob(exportResult.dataUrl);
     format = 'jpeg';
     mimeType = 'image/jpeg';
     s3Key = `designs/${params.purchaseId}/${params.designId}_highres.jpg`;
@@ -92,53 +96,20 @@ export async function uploadDesignHighRes(params: {
     );
   }
 
-  let uploadedToS3 = false;
+  // Upload via local API proxy route (server-side S3 credentials, no CORS issues)
+  const uploadForm = new FormData();
+  uploadForm.append('key', s3Key);
+  uploadForm.append('contentType', mimeType);
+  uploadForm.append('file', blob, s3Key.split('/').pop() ?? `highres.${format}`);
 
-  // 1. Try Direct S3 Upload via Presigned PUT URL (Lightning fast, bypasses Next.js server entirely)
-  try {
-    const presignedRes = await fetch('/api/upload/s3-presigned', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: s3Key, contentType: mimeType }),
-    });
+  const uploadRes = await fetch('/api/upload/high-res', {
+    method: 'POST',
+    body: uploadForm,
+  });
 
-    if (presignedRes.ok) {
-      const { uploadUrl } = await presignedRes.json();
-      const directRes = await fetch(uploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': mimeType },
-        body: blob,
-      });
-
-      if (directRes.ok) {
-        console.log(`[S3 Direct Upload] Direct upload successful for ${s3Key}!`);
-        uploadedToS3 = true;
-      } else {
-        console.warn(`[S3 Direct Upload] S3 PUT failed (Status: ${directRes.status}). Falling back to local API route.`);
-      }
-    } else {
-      console.warn('[S3 Direct Upload] Failed to fetch presigned URL. Falling back to local API route.');
-    }
-  } catch (err) {
-    console.warn('[S3 Direct Upload] Error during direct upload (likely S3 CORS). Falling back to local API route.', err);
-  }
-
-  // 2. Fallback to Server-Side Local Proxy route if direct upload failed or blocked by CORS
-  if (!uploadedToS3) {
-    const uploadForm = new FormData();
-    uploadForm.append('key', s3Key);
-    uploadForm.append('contentType', mimeType);
-    uploadForm.append('file', blob, s3Key.split('/').pop() ?? `highres.${format}`);
-
-    const uploadRes = await fetch('/api/upload/high-res', {
-      method: 'POST',
-      body: uploadForm,
-    });
-
-    if (!uploadRes.ok) {
-      console.warn('[S3 Proxy Upload] Local proxy upload failed:', await uploadRes.text());
-      return null;
-    }
+  if (!uploadRes.ok) {
+    console.warn('[S3 Upload] Local proxy upload failed:', await uploadRes.text());
+    return null;
   }
 
   console.log(`[S3 High-Res] Uploaded design ${params.designId} → ${s3Key}`);
