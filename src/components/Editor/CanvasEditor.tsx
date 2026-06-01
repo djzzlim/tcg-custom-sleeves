@@ -1380,7 +1380,7 @@ export default function CanvasEditor({ isMobileView = false }: { isMobileView?: 
       } finally {
         s3UploadInFlightRef.current = false;
       }
-    }, 3000);
+    }, 1000);
 
     return () => clearTimeout(timer);
   }, [

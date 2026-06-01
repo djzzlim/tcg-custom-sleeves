@@ -79,13 +79,23 @@ export default function CheckoutPage() {
       const totalCount = uploadTasks.length;
       let processedCount = 0;
 
-      // Set initial upload state
-      setStatus('uploading');
-      setUploadInfo({
-        done: 0,
-        total: totalCount,
-        label: `Uploading HD designs (0/${totalCount})…`,
+      // Check if all designs are already uploaded
+      const allUploaded = uploadTasks.every(({ design, canvasData }) => {
+        const freshDesign = useStore.getState().sleeves.find((s) => s.id === design.id) ?? design;
+        return designHighResMatchesCanvas(freshDesign, canvasData);
       });
+
+      if (!allUploaded) {
+        setStatus('uploading');
+        setUploadInfo({
+          done: 0,
+          total: totalCount,
+          label: `Uploading HD designs (0/${totalCount})…`,
+        });
+      } else {
+        setStatus('exporting');
+        setUploadInfo(null);
+      }
 
       // 2. Resolve high-res uploads concurrently
       const designPayloads = await Promise.all(
@@ -101,11 +111,13 @@ export default function CheckoutPage() {
           });
 
           processedCount += 1;
-          setUploadInfo({
-            done: processedCount,
-            total: totalCount,
-            label: `Uploading HD designs (${processedCount}/${totalCount})…`,
-          });
+          if (!allUploaded) {
+            setUploadInfo({
+              done: processedCount,
+              total: totalCount,
+              label: `Uploading HD designs (${processedCount}/${totalCount})…`,
+            });
+          }
 
           const copies = sleeveCopiesForDesign(design);
           const sleeveQty = design.quantity ?? copies.length;
