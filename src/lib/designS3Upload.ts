@@ -16,9 +16,7 @@ export function canvasJsonHasUserPhoto(json: string): boolean {
 }
 
 export async function uploadDesignAutoSave(params: {
-  imageBase64: string;
   canvasJson: string;
-  imageKey: string;
   jsonKey: string;
 }): Promise<boolean> {
   const response = await fetch('/api/upload/auto-save', {
@@ -173,9 +171,9 @@ export async function resolveDesignHighResUpload(params: {
     };
   }
 
-  const previewKey = `designs/${purchaseId}/${design.id}_preview.jpg`;
-  console.warn(`[S3 High-Res] Falling back to preview key for ${design.name}`);
-  return { uploadId: previewKey, mimeType: 'image/jpeg', size: 0 };
+  const fallbackKey = `designs/${purchaseId}/${design.id}_highres.png`;
+  console.warn(`[S3 High-Res] Falling back to high-res key for ${design.name}`);
+  return { uploadId: fallbackKey, mimeType: 'image/png', size: 0 };
 }
 
 /** Preview + JSON auto-save, then high-res — call when leaving a design. */
@@ -184,11 +182,16 @@ export async function flushDesignToS3(params: {
   designId: string;
   copyId: string | null;
   canvasData: string;
-  previewUrl: string;
   sleeveType: 'Standard' | 'Japanese';
   imageAdjustments?: ImageAdjustments;
 }): Promise<void> {
-  if (!canvasJsonHasUserPhoto(params.canvasData)) return;
+  // Skip uploading if canvas is completely empty (no custom elements)
+  try {
+    const data = JSON.parse(params.canvasData) as { objects?: unknown[] };
+    if (!data.objects || data.objects.length === 0) return;
+  } catch {
+    return;
+  }
 
   const cached = useStore.getState().sleeves.find((s) => s.id === params.designId);
   if (cached?.highResCanvasData === params.canvasData && cached.highResS3Key) {
@@ -196,13 +199,10 @@ export async function flushDesignToS3(params: {
   }
 
   const suffix = params.copyId ? `_${params.copyId}` : '';
-  const imageKey = `designs/${params.purchaseId}/${params.designId}${suffix}_preview.jpg`;
   const jsonKey = `designs/${params.purchaseId}/${params.designId}${suffix}_canvas.json`;
 
   await uploadDesignAutoSave({
-    imageBase64: params.previewUrl,
     canvasJson: params.canvasData,
-    imageKey,
     jsonKey,
   });
 

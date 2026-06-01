@@ -42,15 +42,30 @@ export interface SleeveDesign {
   highResCanvasData?: string;
 }
 
-function createSleeveCopies(quantity: number, seed?: SleeveCopy[]): SleeveCopy[] {
+function createSleeveCopies(
+  quantity: number,
+  seed?: SleeveCopy[],
+  canvasData?: string,
+  previewUrl?: string
+): SleeveCopy[] {
   return Array.from({ length: quantity }, (_, index) => {
     const existing = seed?.[index];
-    return existing ? { ...existing } : { id: crypto.randomUUID() };
+    return existing
+      ? {
+          ...existing,
+          ...(canvasData !== undefined && !existing.canvasData ? { canvasData } : {}),
+          ...(previewUrl !== undefined && !existing.previewUrl ? { previewUrl } : {}),
+        }
+      : {
+          id: crypto.randomUUID(),
+          ...(canvasData !== undefined ? { canvasData } : {}),
+          ...(previewUrl !== undefined ? { previewUrl } : {}),
+        };
   });
 }
 
 function resizeSleeveCopies(design: SleeveDesign, quantity: number): SleeveCopy[] {
-  return createSleeveCopies(quantity, design.sleeveCopies);
+  return createSleeveCopies(quantity, design.sleeveCopies, design.canvasData, design.previewUrl);
 }
 
 interface AppState {
@@ -248,9 +263,30 @@ export const useStore = create<AppState>((set) => ({
         state.activeSleeveId !== designId ||
         !state.activeSleeveCopyId ||
         resized.some((copy) => copy.id === state.activeSleeveCopyId);
+
+      let parentCanvasData = design.canvasData;
+      let parentPreviewUrl = design.previewUrl;
+      if (clamped === 1 && resized[0]) {
+        if (resized[0].canvasData) {
+          parentCanvasData = resized[0].canvasData;
+          parentPreviewUrl = resized[0].previewUrl;
+        } else if (design.canvasData) {
+          resized[0].canvasData = design.canvasData;
+          resized[0].previewUrl = design.previewUrl;
+        }
+      }
+
       return {
         sleeves: state.sleeves.map((s) =>
-          s.id === designId ? { ...s, quantity: clamped, sleeveCopies: resized } : s
+          s.id === designId
+            ? {
+                ...s,
+                quantity: clamped,
+                sleeveCopies: resized,
+                canvasData: parentCanvasData,
+                previewUrl: parentPreviewUrl,
+              }
+            : s
         ),
         activeSleeveCopyId: activeCopyStillExists ? state.activeSleeveCopyId : null,
       };
@@ -258,7 +294,18 @@ export const useStore = create<AppState>((set) => ({
 
   updateSleeve: (id, data) =>
     set((state) => ({
-      sleeves: state.sleeves.map((s) => (s.id === id ? { ...s, ...data } : s)),
+      sleeves: state.sleeves.map((s) => {
+        if (s.id !== id) return s;
+        let nextCopies = s.sleeveCopies;
+        if (s.sleeveCopies) {
+          nextCopies = s.sleeveCopies.map((copy) => ({
+            ...copy,
+            ...(data.canvasData !== undefined ? { canvasData: data.canvasData } : {}),
+            ...(data.previewUrl !== undefined ? { previewUrl: data.previewUrl } : {}),
+          }));
+        }
+        return { ...s, ...data, sleeveCopies: nextCopies };
+      }),
     })),
 
   updateSleeveCopy: (designId, copyId, data) =>
@@ -351,3 +398,10 @@ export const useStore = create<AppState>((set) => ({
       photoAdjustments: { ...state.photoAdjustments, ...props },
     })),
 }));
+
+if (typeof window !== 'undefined') {
+  (window as any).__STORE__ = useStore;
+}
+
+
+

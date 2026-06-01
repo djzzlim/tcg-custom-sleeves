@@ -56,26 +56,12 @@ export default function CheckoutPage() {
         return;
       }
 
-      const designPayloads: Array<{
-        packName: string;
-        packSize: number;
-        sleeveType: 'Standard' | 'Japanese';
-        name: string;
-        uploadId: string;
-        mimeType: string;
-        size: number;
-        quantity: number;
+      // 1. Gather all designs to upload
+      const uploadTasks: Array<{
+        design: SleeveDesign;
+        pack: Pack;
+        canvasData: string;
       }> = [];
-
-      const packDesignCount = packs.reduce(
-        (sum, pack) => sum + designsInPack(sleeves, pack.id).length,
-        0
-      );
-      let processedDesigns = 0;
-      const highResByDesignId = new Map<
-        string,
-        { uploadId: string; mimeType: string; size: number }
-      >();
 
       for (const pack of packs) {
         const packDesigns = designsInPack(sleeves, pack.id);
@@ -86,34 +72,45 @@ export default function CheckoutPage() {
           if (!canvasData) {
             throw new Error(`"${design.name}" in "${pack.name}" is missing artwork.`);
           }
+          uploadTasks.push({ design, pack, canvasData });
+        }
+      }
 
-          if (!highResByDesignId.has(design.id)) {
-            const freshDesign =
-              useStore.getState().sleeves.find((s) => s.id === design.id) ?? design;
+      const totalCount = uploadTasks.length;
+      let processedCount = 0;
 
-            if (!designHighResMatchesCanvas(freshDesign, canvasData)) {
-              setUploadInfo({
-                done: processedDesigns,
-                total: packDesignCount,
-                label: `Uploading HD "${freshDesign.name}" (${pack.name})…`,
-              });
-              setStatus('uploading');
-            }
+      // Set initial upload state
+      setStatus('uploading');
+      setUploadInfo({
+        done: 0,
+        total: totalCount,
+        label: `Uploading HD designs (0/${totalCount})…`,
+      });
 
-            const highRes = await resolveDesignHighResUpload({
-              purchaseId,
-              design: freshDesign,
-              canvasData,
-              sleeveType: pack.sleeveType,
-            });
-            highResByDesignId.set(design.id, highRes);
-          }
+      // 2. Resolve high-res uploads concurrently
+      const designPayloads = await Promise.all(
+        uploadTasks.map(async ({ design, pack, canvasData }) => {
+          const freshDesign =
+            useStore.getState().sleeves.find((s) => s.id === design.id) ?? design;
 
-          const highRes = highResByDesignId.get(design.id)!;
+          const highRes = await resolveDesignHighResUpload({
+            purchaseId,
+            design: freshDesign,
+            canvasData,
+            sleeveType: pack.sleeveType,
+          });
+
+          processedCount += 1;
+          setUploadInfo({
+            done: processedCount,
+            total: totalCount,
+            label: `Uploading HD designs (${processedCount}/${totalCount})…`,
+          });
+
+          const copies = sleeveCopiesForDesign(design);
           const sleeveQty = design.quantity ?? copies.length;
 
-          // One Sheet row per design (qty 65 = one row with quantity 65, not 65 duplicate rows).
-          designPayloads.push({
+          return {
             packName: pack.name,
             packSize: pack.size,
             sleeveType: pack.sleeveType,
@@ -122,12 +119,11 @@ export default function CheckoutPage() {
             mimeType: highRes.mimeType,
             size: highRes.size,
             quantity: sleeveQty,
-          });
-          processedDesigns += 1;
-        }
-      }
+          };
+        })
+      );
 
-      setUploadInfo({ done: packDesignCount, total: packDesignCount, label: 'Finalizing order…' });
+      setUploadInfo({ done: totalCount, total: totalCount, label: 'Finalizing order…' });
       setStatus('uploading');
       const res = await fetch('/api/order', {
         method: 'POST',

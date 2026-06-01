@@ -324,13 +324,18 @@ export default function CanvasEditor({ isMobileView = false }: { isMobileView?: 
 
   const highResFlushInFlightRef = useRef(new Set<string>());
 
-  /** When switching designs (or leaving the editor), save + upload preview, JSON, and HD to S3. */
   useLayoutEffect(() => {
     return () => {
       const canvas = fabricCanvas.current;
       const designId = latestSleeveIdRef.current;
       const copyId = latestSleeveCopyIdRef.current;
       if (!canvas || !designId) return;
+
+      const matchesViewport = isMobileView === window.matchMedia('(max-width: 1023px)').matches;
+      if (!matchesViewport) {
+        console.log(`CLEANUP IGNORED for viewport isMobileView=${isMobileView} design=${designId}`);
+        return;
+      }
 
       const designSnap = useStore.getState().sleeves.find((s) => s.id === designId);
       const copySnap = copyId
@@ -342,27 +347,32 @@ export default function CanvasEditor({ isMobileView = false }: { isMobileView?: 
       let json: string;
       let previewUrl: string;
 
+      console.log('CLEANUP RUNNING for design:', designId, 'isLoading:', isLoadingRef.current);
       if (isLoadingRef.current) {
         const cachedJson = lastSavedJsonByKeyRef.current.get(
           `${designId}:${copyId ?? 'design'}`
         );
-        if (cachedJson && (canvasHasUserPhoto(cachedJson) || canvasHasFrame(cachedJson))) {
+        console.log('isLoading is true. cachedJson length:', cachedJson?.length, 'existingCanvas length:', existingCanvas?.length);
+        if (cachedJson && canvasHasUserPhoto(cachedJson)) {
           json = cachedJson;
           previewUrl = existingPreview ?? canvas.toDataURL({ format: 'jpeg', quality: 0.8, multiplier: 1 });
-        } else if (existingCanvas && (canvasHasUserPhoto(existingCanvas) || canvasHasFrame(existingCanvas)) && existingPreview) {
+        } else if (existingCanvas && canvasHasUserPhoto(existingCanvas) && existingPreview) {
           json = existingCanvas;
           previewUrl = existingPreview;
         } else {
+          console.log('isLoading is true, but no cache/existing with photo. Returning early.');
           return;
         }
       } else {
         json = JSON.stringify(canvas.toObject([...CANVAS_JSON_PROPS]));
+        console.log('isLoading is false. json length:', json.length, 'existingCanvas length:', existingCanvas?.length);
         previewUrl = canvas.toDataURL({ format: 'jpeg', quality: 0.8, multiplier: 1 });
         if (
-          ((!canvasJsonHasUserPhoto(json) && canvasHasUserPhoto(existingCanvas)) ||
-           (!canvasHasFrame(json) && canvasHasFrame(existingCanvas))) &&
+          !canvasJsonHasUserPhoto(json) &&
+          canvasHasUserPhoto(existingCanvas) &&
           existingPreview
         ) {
+          console.log('isLoading is false, but new json lacks photo while existing has it. Returning early to prevent loss.');
           return;
         }
       }
@@ -373,7 +383,14 @@ export default function CanvasEditor({ isMobileView = false }: { isMobileView?: 
         useStore.getState().updateSleeve(designId, { canvasData: json, previewUrl });
       }
 
-      if (!canvasJsonHasUserPhoto(json)) return;
+      // Skip uploading if canvas is completely empty (no custom elements)
+      try {
+        const data = JSON.parse(json);
+        if (!data.objects || data.objects.length === 0) return;
+      } catch {
+        return;
+      }
+
       if (highResFlushInFlightRef.current.has(designId)) return;
 
       const state = useStore.getState();
@@ -390,7 +407,6 @@ export default function CanvasEditor({ isMobileView = false }: { isMobileView?: 
         designId,
         copyId,
         canvasData: json,
-        previewUrl,
         sleeveType: pack.sleeveType,
         ...(design.imageAdjustments !== undefined
           ? { imageAdjustments: design.imageAdjustments }
@@ -651,9 +667,11 @@ export default function CanvasEditor({ isMobileView = false }: { isMobileView?: 
             break;
           }
           const file = action.payload;
+          isLoadingRef.current = true; // Synchronously block intermediate saves/cleanups
           void (async () => {
             const validation = await validateUploadedImage(file);
             if (!validation.ok) {
+              isLoadingRef.current = false;
               await appAlert({
                 title: 'Invalid image',
                 message: validation.error.message,
@@ -665,7 +683,10 @@ export default function CanvasEditor({ isMobileView = false }: { isMobileView?: 
             reader.onload = (f) => {
               const data = f.target?.result as string;
               FabricImage.fromURL(data).then((img) => {
-                if (fabricCanvas.current !== cvs) return;
+                if (fabricCanvas.current !== cvs || latestSleeveIdRef.current !== sid) {
+                  isLoadingRef.current = false;
+                  return;
+                }
                 const cvsHeight = currentHeightRef.current;
 
                 if (isReplace) {
@@ -704,10 +725,16 @@ export default function CanvasEditor({ isMobileView = false }: { isMobileView?: 
                 }
                 const key = latestCanvasKeyRef.current;
                 const json = JSON.stringify(cvs.toObject([...CANVAS_JSON_PROPS]));
+                isLoadingRef.current = false; // Safely unlock before snapshot/save
                 snapshotHistory();
                 if (key) setHistoryFloor(key, json);
                 saveToStore();
+              }).catch(() => {
+                isLoadingRef.current = false;
               });
+            };
+            reader.onerror = () => {
+              isLoadingRef.current = false;
             };
             reader.readAsDataURL(file);
           })();
@@ -736,6 +763,7 @@ export default function CanvasEditor({ isMobileView = false }: { isMobileView?: 
         case 'APPLY_FRAME': {
           const type = action.payload;
           const cvsHeight = currentHeightRef.current;
+          const sid = latestSleeveIdRef.current;
           const existing = cvs.getObjects().filter((obj: any) => obj.isFrame);
           existing.forEach(obj => cvs.remove(obj));
 
@@ -755,7 +783,7 @@ export default function CanvasEditor({ isMobileView = false }: { isMobileView?: 
 
             if (frameSrc) {
               FabricImage.fromURL(frameSrc).then((img) => {
-                if (fabricCanvas.current !== cvs) return;
+                if (fabricCanvas.current !== cvs || latestSleeveIdRef.current !== sid) return;
                 const scaleX = CANVAS_WIDTH / 400;
                 const scaleY = cvsHeight / 560;
 
@@ -1179,6 +1207,9 @@ export default function CanvasEditor({ isMobileView = false }: { isMobileView?: 
 
   // 2. Sync Canvas when the active design or individual sleeve copy changes
   useEffect(() => {
+    const matchesViewport = isMobileView === window.matchMedia('(max-width: 1023px)').matches;
+    if (!matchesViewport) return;
+
     if (!fabricCanvas.current || !activeSleeveId) return;
     const canvas = fabricCanvas.current;
     const loadGeneration = ++canvasLoadGenerationRef.current;
@@ -1234,8 +1265,8 @@ export default function CanvasEditor({ isMobileView = false }: { isMobileView?: 
         const json = JSON.stringify(canvas.toObject([...CANVAS_JSON_PROPS]));
         const existingCanvas = canvasData;
         if (
-          (!canvasJsonHasUserPhoto(json) && canvasHasUserPhoto(existingCanvas)) ||
-          (!canvasHasFrame(json) && canvasHasFrame(existingCanvas))
+          !canvasJsonHasUserPhoto(json) &&
+          canvasHasUserPhoto(existingCanvas)
         ) {
           setTimeout(() => {
             if (canvasLoadGenerationRef.current === loadGeneration) {
@@ -1303,11 +1334,14 @@ export default function CanvasEditor({ isMobileView = false }: { isMobileView?: 
     return { canvasData, previewUrl };
   }, [activeSleeveId, activeSleeveCopyId, sleeves]);
 
-  // Debounced preview + JSON while editing (HD uploads on design switch via flush above).
+  // Debounced preview + JSON auto-save AND HD pre-upload while editing.
   const lastUploadedJsonByDesignRef = useRef<Map<string, string>>(new Map());
   const s3UploadInFlightRef = useRef(false);
 
   useEffect(() => {
+    const matchesViewport = isMobileView === window.matchMedia('(max-width: 1023px)').matches;
+    if (!matchesViewport) return;
+
     if (!activeSleeveId || !activeDesignArtwork) return;
     if (isLoadingRef.current) return;
 
@@ -1326,33 +1360,23 @@ export default function CanvasEditor({ isMobileView = false }: { isMobileView?: 
 
       s3UploadInFlightRef.current = true;
       try {
-        console.log(`[S3 Auto-Save] Triggering background upload for design ${activeSleeveId}...`);
+        console.log(`[S3 Auto-Save & HD Upload] Triggering eager background upload for design ${activeSleeveId}...`);
 
-        const suffix = activeSleeveCopyId ? `_${activeSleeveCopyId}` : '';
-        const imageKey = `designs/${purchaseId}/${activeSleeveId}${suffix}_preview.jpg`;
-        const jsonKey = `designs/${purchaseId}/${activeSleeveId}${suffix}_canvas.json`;
-
-        const response = await fetch('/api/upload/auto-save', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            imageBase64: previewUrl,
-            canvasJson: canvasData,
-            imageKey,
-            jsonKey,
-          }),
+        await flushDesignToS3({
+          purchaseId,
+          designId: activeSleeveId,
+          copyId: activeSleeveCopyId,
+          canvasData,
+          sleeveType: activePack?.sleeveType ?? 'Standard',
+          ...(activeSleeve?.imageAdjustments !== undefined
+            ? { imageAdjustments: activeSleeve.imageAdjustments }
+            : {}),
         });
 
-        if (!response.ok) {
-          const errText = await response.text();
-          console.warn(`[S3 Auto-Save] Upload skipped (${response.status}):`, errText);
-          return;
-        }
-
-        console.log(`[S3 Auto-Save] Background upload successful for design ${activeSleeveId}`);
+        console.log(`[S3 Auto-Save & HD Upload] Eager background upload successful for design ${activeSleeveId}`);
         lastUploadedJsonByDesignRef.current.set(designUploadKey, canvasData);
       } catch (err) {
-        console.warn('[S3 Auto-Save] Error uploading in background:', err);
+        console.warn('[S3 Auto-Save & HD Upload] Error uploading in background:', err);
       } finally {
         s3UploadInFlightRef.current = false;
       }
@@ -1364,6 +1388,8 @@ export default function CanvasEditor({ isMobileView = false }: { isMobileView?: 
     activeSleeveCopyId,
     activeDesignArtwork?.canvasData,
     activeDesignArtwork?.previewUrl,
+    activePack?.sleeveType,
+    activeSleeve?.imageAdjustments,
   ]);
 
   const FONT_FAMILIES = [

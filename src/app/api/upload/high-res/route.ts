@@ -7,9 +7,7 @@ import {
   putObjectWithRetry,
 } from '@/lib/s3';
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-export const maxDuration = 120;
+const sheetLoggedKeys = new Set<string>();
 
 export async function POST(request: Request) {
   try {
@@ -53,6 +51,42 @@ export async function POST(request: Request) {
 
     const fileUrl = publicObjectUrl(key);
     console.log(`\n🚀 [S3 High-Res Upload]: ${fileUrl}\n`);
+
+    // Best-effort: write the high-res URL to Google Sheets (once per key).
+    const webhookUrl = (process.env.GOOGLE_SHEETS_WEBHOOK_URL || '').trim();
+    if (webhookUrl && !sheetLoggedKeys.has(key)) {
+      sheetLoggedKeys.add(key);
+
+      const parts = key.split('/');
+      const purchaseId = parts[1] || 'unknown';
+      const fileName = parts.slice(-1)[0] || 'highres.png';
+      const jsonKey = key.replace(/_highres\.(png|jpg|jpeg)$/, '_canvas.json');
+      const jsonUrl = publicObjectUrl(jsonKey);
+
+      void fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // Keep the payload shape compatible with the existing Apps Script order webhook.
+        body: JSON.stringify({
+          purchaseId,
+          remarks: `highres: ${fileName} | json: ${jsonKey}`,
+          status: 'Draft',
+          designs: [
+            {
+              name: fileName,
+              quantity: 1,
+              dataUrl: fileUrl,
+              uploadId: key,
+              mimeType: contentType,
+              jsonUrl,
+            },
+          ],
+        }),
+      }).catch((e) => {
+        sheetLoggedKeys.delete(key);
+        console.error('[High-Res API] Failed to post URL to Sheets webhook:', e);
+      });
+    }
 
     return NextResponse.json({ success: true, key, fileUrl });
   } catch (error: unknown) {
