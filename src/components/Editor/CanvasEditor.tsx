@@ -1095,6 +1095,17 @@ export default function CanvasEditor({ isMobileView = false }: { isMobileView?: 
 
     // Keyboard support for deleting objects
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore keyboard shortcuts if the user is focused on an input, textarea, or contenteditable DOM element
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+         target.tagName === 'TEXTAREA' ||
+         target.isContentEditable)
+      ) {
+        return;
+      }
+
       const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(navigator.platform);
       const mod = isMac ? e.metaKey : e.ctrlKey;
       if (mod && e.key.toLowerCase() === 'z') {
