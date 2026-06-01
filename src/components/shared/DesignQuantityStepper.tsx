@@ -41,8 +41,9 @@ export default function DesignQuantityStepper({
       setDraft(String(value));
       return;
     }
-    onChange(n);
-    setDraft(String(Math.max(min, Math.min(max, Math.floor(n)))));
+    const clamped = Math.max(min, Math.min(max, Math.floor(n)));
+    onChange(clamped);
+    setDraft(String(clamped));
   };
 
   return (
@@ -76,7 +77,7 @@ export default function DesignQuantityStepper({
             setDraft(next);
             if (next === '') return;
             const n = Number(next);
-            if (Number.isFinite(n)) onChange(n);
+            if (Number.isFinite(n) && n >= min) onChange(n);
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {

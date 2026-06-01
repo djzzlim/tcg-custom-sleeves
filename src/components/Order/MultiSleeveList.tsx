@@ -319,7 +319,7 @@ export default function MultiSleeveList() {
                                 value={qty}
                                 onChange={(e) => {
                                   const n = Number(e.target.value);
-                                  if (Number.isFinite(n)) setDesignQuantity(design.id, n);
+                                  if (Number.isFinite(n) && n > 0) setDesignQuantity(design.id, n);
                                 }}
                                 className="h-7 w-12 rounded border border-border bg-black/40 px-1 text-center font-mono text-[11px] text-foreground outline-none focus:border-primary [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none sm:h-6"
                               />
