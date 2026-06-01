@@ -1,10 +1,12 @@
 'use client';
 
 import { useRef } from 'react';
-import { useStore } from '@/store/useStore';
+import { useStore, type Pack, type SleeveDesign } from '@/store/useStore';
 import { cn } from '@/lib/utils';
-import { Plus, ChevronUp, ChevronDown } from 'lucide-react';
+import { Plus, ChevronUp, ChevronDown, X } from 'lucide-react';
 import DesignQuantityStepper from '@/components/shared/DesignQuantityStepper';
+import { setDesignQuantityWithSave } from '@/lib/designQuantity';
+import { appConfirm } from '@/lib/appDialog';
 import {
   designsInPack,
   remainingSleevesForPack,
@@ -19,7 +21,7 @@ export default function MobileDesignsBottomSheet() {
     activeSleeveId,
     activeTab,
     addDesignToPack,
-    setDesignQuantity,
+    removeSleeve,
     setActiveSleeve,
     mobileDesignsSheetExpanded,
     setMobileDesignsSheetExpanded,
@@ -61,6 +63,21 @@ export default function MobileDesignsBottomSheet() {
   const activeMax = activeDesign
     ? maxQuantityForDesignInPack(packDesigns, activeDesign.id, pack.size)
     : 1;
+
+  const onRemoveDesign = async (targetPack: Pack, design: SleeveDesign) => {
+    const targetDesigns = designsInPack(sleeves, targetPack.id);
+    const isLast = targetDesigns.length === 1;
+    const ok = await appConfirm({
+      title: isLast ? 'Remove pack?' : 'Remove design?',
+      message: isLast
+        ? `"${design.name}" is the only design in "${targetPack.name}". Removing it will also remove the pack.`
+        : `Remove "${design.name}"? Its ${design.quantity ?? 0} sleeve${(design.quantity ?? 0) === 1 ? '' : 's'} in "${targetPack.name}" will be unassigned.`,
+      variant: 'destructive',
+      confirmLabel: isLast ? 'Remove pack' : 'Remove',
+    });
+    if (!ok) return;
+    removeSleeve(design.id);
+  };
 
   return (
     <div
@@ -124,10 +141,8 @@ export default function MobileDesignsBottomSheet() {
               const qty = design.quantity ?? 0;
               const isActive = design.id === activeSleeveId;
               return (
-                <button
+                <div
                   key={design.id}
-                  type="button"
-                  onClick={() => setActiveSleeve(design.id)}
                   className={cn(
                     'relative shrink-0 w-[4.5rem] overflow-hidden rounded-lg border aspect-[52/72]',
                     isActive
@@ -137,27 +152,45 @@ export default function MobileDesignsBottomSheet() {
                         : 'border-border'
                   )}
                 >
-                  {design.previewUrl ? (
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img
-                      src={design.previewUrl}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <span className="flex h-full w-full items-center justify-center bg-black/50 text-[8px] text-muted-foreground">
-                      —
+                  <button
+                    type="button"
+                    onClick={() => setActiveSleeve(design.id)}
+                    className="h-full w-full"
+                    aria-label={`Select ${design.name}`}
+                  >
+                    {design.previewUrl ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={design.previewUrl}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span className="flex h-full w-full items-center justify-center bg-black/50 text-[8px] text-muted-foreground">
+                        —
+                      </span>
+                    )}
+                    <span className="absolute inset-x-0 bottom-0 truncate bg-black/75 px-1 py-0.5 text-[8px] font-semibold text-foreground">
+                      {design.name}
                     </span>
-                  )}
-                  <span className="absolute inset-x-0 bottom-0 truncate bg-black/75 px-1 py-0.5 text-[8px] font-semibold text-foreground">
-                    {design.name}
-                  </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void onRemoveDesign(pack, design);
+                    }}
+                    className="absolute left-0.5 top-0.5 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-black/80 text-white/90 shadow-sm transition-colors hover:bg-destructive hover:text-white"
+                    aria-label={`Remove ${design.name}`}
+                  >
+                    <X size={10} strokeWidth={2.5} />
+                  </button>
                   {qty > 1 && (
                     <span className="absolute right-0.5 top-0.5 rounded bg-primary px-1 py-px font-mono text-[8px] font-bold text-black">
                       ×{qty}
                     </span>
                   )}
-                </button>
+                </div>
               );
             })}
             <button
@@ -202,7 +235,7 @@ export default function MobileDesignsBottomSheet() {
                 size="sm"
                 value={activeQty}
                 max={activeMax}
-                onChange={(n) => setDesignQuantity(activeDesign.id, n)}
+                onChange={(n) => setDesignQuantityWithSave(activeDesign.id, n)}
                 maxHint={`Max ${activeMax} for this design`}
               />
             </div>
